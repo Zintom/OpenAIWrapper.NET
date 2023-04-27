@@ -1,6 +1,7 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
-namespace Zintom.OpenAIWrapper;
+namespace Zintom.OpenAIWrapper.Models;
 
 public class ChatCompletion
 {
@@ -45,13 +46,4 @@ public class Choice
 
     [JsonPropertyName("index")]
     public int Index { get; set; }
-}
-
-public class Message
-{
-    [JsonPropertyName("role")]
-    public string? Role { get; set; }
-
-    [JsonPropertyName("content")]
-    public string? Content { get; set; }
 }
