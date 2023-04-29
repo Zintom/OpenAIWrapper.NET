@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -67,11 +67,12 @@ public class GPT
     }
 
     /// <summary>
-    /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
+    /// Gets a streaming chat completion for the conversation history provided in <paramref name="messages"/>.
     /// </summary>
     /// <param name="messages">A list of messages describing the conversation so far.</param>
-    /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
-    public void GetStreamingChatCompletion(Message[] messages, Action<ChatCompletion?> partialCompletionCallback)
+    /// <param name="partialCompletionCallback">The callback function for each time a 'delta' <see cref="ChatCompletion"/> is received.</param>
+    /// <returns>A <see cref="HttpStatusCode"/> which represents the response to the <i>POST</i> message.</returns>
+    public HttpStatusCode GetStreamingChatCompletion(Message[] messages, Action<ChatCompletion?> partialCompletionCallback)
     {
         var requestBodyObject = new
         {
@@ -89,7 +90,7 @@ public class GPT
                                      out Stream responseStream);
 
         if (!response.IsSuccessStatusCode)
-            return;
+            return response.StatusCode;
 
         // Read event stream
         // https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format
@@ -110,6 +111,8 @@ public class GPT
                 partialCompletionCallback.Invoke(completion);
             }
         }
+
+        return response.StatusCode;
 
         static bool TryConsume(Span<byte> buf, out int consumed, out ChatCompletion? completion)
         {
