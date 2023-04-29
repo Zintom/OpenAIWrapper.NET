@@ -19,7 +19,7 @@ public class TestGpt
     {
         // Arrange
         var client = new MockHttpClient();
-        var gpt = new GPT(Environment.GetEnvironmentVariable("API_KEY"), client);
+        var gpt = new ChatGPT(Environment.GetEnvironmentVariable("API_KEY"), client);
         var finalStringBuilder = new StringBuilder();
 
         // Act

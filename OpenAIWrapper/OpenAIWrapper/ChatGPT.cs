@@ -10,7 +10,7 @@ using Zintom.OpenAIWrapper.Models;
 
 namespace Zintom.OpenAIWrapper;
 
-public class GPT
+public class ChatGPT
 {
     private readonly IHttpClient _client;
 
@@ -19,7 +19,7 @@ public class GPT
     /// <summary>
     /// Sets the API key to be used for future requests made by this instance.
     /// </summary>
-    public string? APIKey
+    public string? API_Key
     {
         set
         {
@@ -27,6 +27,9 @@ public class GPT
         }
     }
 
+    /// <summary>
+    /// The ID of the model to use. See the <see href="https://platform.openai.com/docs/models/model-endpoint-compatibility">model endpoint compatibility</see> table for details on which models work with the Chat API.
+    /// </summary>
     public string? Model = "gpt-3.5-turbo";
 
     /// <summary>
@@ -34,14 +37,14 @@ public class GPT
     /// </summary>
     public float Temperature = 0.7f;
 
-    public GPT(string? apiKey, IHttpClient? client)
+    public ChatGPT(string? apiKey, IHttpClient? client)
     {
         _client = client ?? new HttpClientWrapper();
         _client.DefaultRequestHeaders.Accept.Clear();
         _client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
 
-        APIKey = apiKey;
+        API_Key = apiKey;
     }
 
     /// <summary>
