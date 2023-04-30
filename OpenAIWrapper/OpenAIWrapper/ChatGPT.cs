@@ -56,6 +56,7 @@ public sealed class ChatGPT
     /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
     /// </summary>
     /// <param name="messages">A list of messages describing the conversation so far.</param>
+    /// <param name="options">Options used to configure the API call.</param>
     /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
     public async Task<ChatCompletion?> GetChatCompletion(Message[] messages, ChatCompletionOptions? options = null)
     {
@@ -81,6 +82,7 @@ public sealed class ChatGPT
     /// </summary>
     /// <param name="messages">A list of messages describing the conversation so far.</param>
     /// <param name="partialCompletionCallback">The callback function for each time a 'delta' <see cref="ChatCompletion"/> is received.</param>
+    /// <param name="options">Options used to configure the API call.</param>
     /// <returns>A <see cref="HttpStatusCode"/> which represents the response to the <i>POST</i> message.</returns>
     public HttpStatusCode GetStreamingChatCompletion(Message[] messages, Action<ChatCompletion?> partialCompletionCallback, ChatCompletionOptions? options = null)
     {
