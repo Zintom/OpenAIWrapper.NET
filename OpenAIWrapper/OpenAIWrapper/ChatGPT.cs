@@ -27,15 +27,20 @@ public class ChatGPT
         }
     }
 
-    /// <summary>
-    /// The ID of the model to use. See the <see href="https://platform.openai.com/docs/models/model-endpoint-compatibility">model endpoint compatibility</see> table for details on which models work with the Chat API.
-    /// </summary>
-    public string? Model = "gpt-3.5-turbo";
+    private ChatCompletionOptions _defaultChatCompletionOptions = new ChatCompletionOptions();
 
-    /// <summary>
-    /// The 'temperature' parameter to be used for future requests made by this instance.
-    /// </summary>
-    public float Temperature = 0.7f;
+    public sealed class ChatCompletionOptions
+    {
+        /// <summary>
+        /// The ID of the model to use. See the <see href="https://platform.openai.com/docs/models/model-endpoint-compatibility">model endpoint compatibility</see> table for details on which models work with the Chat API.
+        /// </summary>
+        public string? Model = "gpt-3.5-turbo";
+
+        /// <summary>
+        /// The 'temperature' parameter to be used for future requests made by this instance.
+        /// </summary>
+        public float Temperature = 0.7f;
+    }
 
     public ChatGPT(string? apiKey, IHttpClient? client)
     {
@@ -52,14 +57,16 @@ public class ChatGPT
     /// </summary>
     /// <param name="messages">A list of messages describing the conversation so far.</param>
     /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
-    public async Task<ChatCompletion?> GetChatCompletion(Message[] messages)
+    public async Task<ChatCompletion?> GetChatCompletion(Message[] messages, ChatCompletionOptions? options = null)
     {
+        options ??= _defaultChatCompletionOptions;
+
         var requestBodyObject = new
         {
             // Do not try to optimize names here, the API needs the specific lower case names.
-            model = Model,
+            model = options.Model,
             messages,
-            temperature = Temperature
+            temperature = options.Temperature
         };
 
         string requestBody = JsonSerializer.Serialize(requestBodyObject);
@@ -75,14 +82,16 @@ public class ChatGPT
     /// <param name="messages">A list of messages describing the conversation so far.</param>
     /// <param name="partialCompletionCallback">The callback function for each time a 'delta' <see cref="ChatCompletion"/> is received.</param>
     /// <returns>A <see cref="HttpStatusCode"/> which represents the response to the <i>POST</i> message.</returns>
-    public HttpStatusCode GetStreamingChatCompletion(Message[] messages, Action<ChatCompletion?> partialCompletionCallback)
+    public HttpStatusCode GetStreamingChatCompletion(Message[] messages, Action<ChatCompletion?> partialCompletionCallback, ChatCompletionOptions? options = null)
     {
+        options ??= _defaultChatCompletionOptions;
+
         var requestBodyObject = new
         {
             // Do not try to optimize names here, the API needs the specific lower case names.
-            model = Model,
+            model = options.Model,
             messages,
-            temperature = Temperature,
+            temperature = options.Temperature,
             stream = true
         };
 
