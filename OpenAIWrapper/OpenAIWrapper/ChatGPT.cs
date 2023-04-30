@@ -27,7 +27,7 @@ public sealed class ChatGPT
         }
     }
 
-    private ChatCompletionOptions _defaultChatCompletionOptions = new ChatCompletionOptions();
+    private readonly ChatCompletionOptions _defaultChatCompletionOptions = new();
 
     public sealed class ChatCompletionOptions
     {
