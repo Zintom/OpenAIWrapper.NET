@@ -10,7 +10,7 @@ using Zintom.OpenAIWrapper.Models;
 
 namespace Zintom.OpenAIWrapper;
 
-public class ChatGPT
+public sealed class ChatGPT
 {
     private readonly IHttpClient _client;
 

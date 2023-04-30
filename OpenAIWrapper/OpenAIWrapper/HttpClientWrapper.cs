@@ -2,7 +2,7 @@
 using System.Net.Http;
 
 namespace Zintom.OpenAIWrapper;
-public class HttpClientWrapper : HttpClient, IHttpClient
+public sealed class HttpClientWrapper : HttpClient, IHttpClient
 {
     public void GetStreamingResponse(HttpRequestMessage request, out HttpResponseMessage response, out Stream responseStream)
     {

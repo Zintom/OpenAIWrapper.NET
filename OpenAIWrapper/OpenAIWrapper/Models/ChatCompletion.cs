@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Zintom.OpenAIWrapper.Models;
 
-public class ChatCompletion
+public sealed class ChatCompletion
 {
     [JsonPropertyName("id")]
     public string? Id { get; set; }
@@ -24,7 +24,7 @@ public class ChatCompletion
     public List<Choice>? Choices { get; set; }
 }
 
-public class Usage
+public sealed class Usage
 {
     [JsonPropertyName("prompt_tokens")]
     public int PromptTokens { get; set; }
@@ -36,7 +36,7 @@ public class Usage
     public int TotalTokens { get; set; }
 }
 
-public class Choice
+public sealed class Choice
 {
     [JsonPropertyName("message")]
     public Message? Message { get; set; }
@@ -54,7 +54,7 @@ public class Choice
 /// <summary>
 /// A message as a part of a conversation.
 /// </summary>
-public class Message
+public sealed class Message
 {
     /// <summary>
     /// The role of the author of this message. One of '<i>system</i>', '<i>user</i>', or '<i>assistant</i>'.
