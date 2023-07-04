@@ -78,6 +78,48 @@ public sealed class ChatGPT
     }
 
     /// <summary>
+    /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
+    /// </summary>
+    /// <param name="messages">A list of messages describing the conversation so far.</param>
+    /// <param name="options">Options used to configure the API call.</param>
+    /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
+    public async Task<ChatCompletion?> GetChatCompletionFunc(Message[] messages, string functionsJsonSchema, ChatCompletionOptions? options = null)
+    {
+        options ??= _defaultChatCompletionOptions;
+
+        using var stream = new MemoryStream();
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions() { Indented = true });
+
+        writer.WriteStartObject();
+
+        writer.WriteString("model", options.Model);
+
+        string messagesJson = JsonSerializer.Serialize(messages, new JsonSerializerOptions() { WriteIndented = true });
+        writer.WritePropertyName("messages");
+        writer.WriteRawValue(messagesJson);
+
+        writer.WriteNumber("temperature", options.Temperature);
+
+        writer.WritePropertyName("functions");
+        writer.WriteRawValue(functionsJsonSchema);
+
+        writer.WriteEndObject();
+
+        writer.Flush();
+
+        using (var sr = new StreamReader(stream))
+        {
+            stream.Position = 0;
+            string requestBody = sr.ReadToEnd();
+
+            using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
+
+            string content = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<ChatCompletion>(content);
+        }
+    }
+
+    /// <summary>
     /// Gets a streaming chat completion for the conversation history provided in <paramref name="messages"/>.
     /// </summary>
     /// <param name="messages">A list of messages describing the conversation so far.</param>
