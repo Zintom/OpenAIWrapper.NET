@@ -1,23 +1,45 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
 namespace Zintom.OpenAIWrapper.Models;
 
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+/// <summary>
+/// Defines a function which can be executed by a language model.
+/// <para/>
+/// Use the <see cref="Builder"/> to instantiate this class.
+/// </summary>
 public partial class FunctionDefinition
 {
     private string _name = "";
     private string _description = "";
     private List<FunctionParameter> _parameters = null!; // The only way to get an instance of FunctionDefinition is going through the builder, which sets this field.
+    private Delegate? _method;
 
+    /// <summary>
+    /// Cache to store the JSON schema after using ToJsonSchema so that it only calculates it once.
+    /// </summary>
     private string? _jsonSchema = null;
 
+    /// <summary>
+    /// The name of this function.
+    /// </summary>
     public string Name { get => _name; }
+
+    /// <summary>
+    /// The description of this function.
+    /// </summary>
     public string Description { get => _description; }
 
+    /// <summary>
+    /// Should only be instantiated by the <see cref="Builder"/>.
+    /// </summary>
     private FunctionDefinition() { }
 
+    /// <summary>
+    /// Holds the details regarding a parameter for a function.
+    /// </summary>
     private class FunctionParameter
     {
         internal readonly string _name;
@@ -54,6 +76,29 @@ public partial class FunctionDefinition
             _enumValues = enumValues;
             _required = isRequired;
         }
+    }
+
+    /// <summary>
+    /// Runs the function which was bound to this definition using the given <paramref name="arguments"/>.
+    /// </summary>
+    /// <param name="arguments"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    public string? RunFunction(List<FunctionCall.ArgumentDefinition> arguments)
+    {
+        if (_method == null)
+            throw new InvalidOperationException("This function-definition does not have a defined function (delegate) to run.");
+
+        // Compile array of parameters.
+        object?[] argumentObjects = new object[_method.Method.GetParameters().Length];
+
+        // Deliberately leaves any non-set parameters to null (they are optional, but must be provided to dynamic invoke).
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            argumentObjects[i] = arguments[i].Value;
+        }
+
+        return (string?)(_method?.DynamicInvoke(argumentObjects));
     }
 
     /// <summary>
@@ -141,4 +186,3 @@ public partial class FunctionDefinition
         }
     }
 }
-#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
