@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Xml;
 
 namespace Zintom.OpenAIWrapper.Models;
 
@@ -69,11 +68,13 @@ public sealed class Choice
     public Message? Delta { get; set; }
 
     /// <summary>
-    /// One of: '<i>stop</i>', '<i>length</i>', '<i>content_filter</i>', or '<i>null</i>'.
+    /// One of: '<i>stop</i>', '<i>length</i>', '<i>function_call</i>', '<i>content_filter</i>', or '<i>null</i>'.
     /// <para/>
     /// <i>stop</i>: API returned complete model output.
     /// <para/>
     /// <i>length</i>: Incomplete model output due to max_tokens parameter or token limit.
+    /// <para/>
+    /// <i>function_call</i>: The model decided to call a function.
     /// <para/>
     /// <i>content_filter</i>: Omitted content due to a flag from the content filters.
     /// <para/>
@@ -95,13 +96,13 @@ public sealed class Choice
 public sealed class Message
 {
     /// <summary>
-    /// The role of the author of this message. One of '<i>system</i>', '<i>user</i>', or '<i>assistant</i>'.
+    /// The role of the author of this message. One of '<i>system</i>', '<i>user</i>', '<i>assistant</i>', or '<i>function</i>'.
     /// </summary>
     [JsonPropertyName("role")]
     public string? Role { get; set; }
 
     /// <summary>
-    /// The contents of the message.
+    /// The contents of the message. <c>Content</c> is required for all messages except assistant messages with function calls.
     /// </summary>
     [JsonPropertyName("content")]
     public string? Content { get; set; }
@@ -120,6 +121,9 @@ public sealed class Message
     public FunctionCall? FunctionCall { get; set; }
 }
 
+/// <summary>
+/// This is the object returned in a <see cref="ChatCompletion"/> if the model wants to call a function.
+/// </summary>
 [JsonConverter(typeof(FunctionCallJsonConverter))]
 public sealed class FunctionCall
 {
