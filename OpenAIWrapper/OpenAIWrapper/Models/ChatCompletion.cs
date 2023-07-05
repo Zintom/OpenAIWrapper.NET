@@ -152,7 +152,14 @@ public sealed class FunctionCall
 
     public enum ArgumentType
     {
-        Decimal,
+        /// <summary>
+        /// A double precision number.
+        /// </summary>
+        Number,
+
+        /// <summary>
+        /// A string.
+        /// </summary>
         String
     }
 }
@@ -199,10 +206,13 @@ public sealed class FunctionCallJsonConverter : JsonConverter<FunctionCall>
 
         // "arguments" is supplied as it's own JSON object, which this reader cannot read into, so we need to deserialize that separately.
 
-        Span<byte> argumentsUtf8Bytes = stackalloc byte[Encoding.UTF8.GetMaxByteCount(arguments.Length)];
-        argumentsUtf8Bytes = argumentsUtf8Bytes[..Encoding.UTF8.GetBytes(arguments, argumentsUtf8Bytes)];
+        if (arguments.Length > 0)
+        {
+            Span<byte> argumentsUtf8Bytes = stackalloc byte[Encoding.UTF8.GetMaxByteCount(arguments.Length)];
+            argumentsUtf8Bytes = argumentsUtf8Bytes[..Encoding.UTF8.GetBytes(arguments, argumentsUtf8Bytes)];
 
-        InternalReadArgumentsObject(new Utf8JsonReader(argumentsUtf8Bytes), functionCall);
+            InternalReadArgumentsObject(new Utf8JsonReader(argumentsUtf8Bytes), functionCall);
+        }
 
         // Read EndObject
         if (!reader.Read() ||
@@ -233,8 +243,8 @@ public sealed class FunctionCallJsonConverter : JsonConverter<FunctionCall>
 
                 if (reader.TokenType == JsonTokenType.Number)
                 {
-                    argValue = reader.GetDecimal();
-                    argType = FunctionCall.ArgumentType.Decimal;
+                    argValue = reader.GetDouble();
+                    argType = FunctionCall.ArgumentType.Number;
                 }
                 if (reader.TokenType == JsonTokenType.String)
                 {
