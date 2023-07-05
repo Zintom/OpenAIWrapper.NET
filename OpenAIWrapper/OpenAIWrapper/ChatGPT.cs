@@ -1,5 +1,9 @@
-﻿using System;
+﻿using NLog;
+using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -7,11 +11,14 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Zintom.OpenAIWrapper.Models;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Zintom.OpenAIWrapper;
 
 public sealed class ChatGPT
 {
+    private readonly Logger _logger = LogManager.GetCurrentClassLogger();
+
     private readonly IHttpClient _client;
 
     private const string _requestUri = "https://api.openai.com/v1/chat/completions";
@@ -52,38 +59,7 @@ public sealed class ChatGPT
         API_Key = apiKey;
     }
 
-    /// <summary>
-    /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
-    /// </summary>
-    /// <param name="messages">A list of messages describing the conversation so far.</param>
-    /// <param name="options">Options used to configure the API call.</param>
-    /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
-    public async Task<ChatCompletion?> GetChatCompletion(Message[] messages, ChatCompletionOptions? options = null)
-    {
-        options ??= _defaultChatCompletionOptions;
-
-        var requestBodyObject = new
-        {
-            // Do not try to optimize names here, the API needs the specific lower case names.
-            model = options.Model,
-            messages,
-            temperature = options.Temperature
-        };
-
-        string requestBody = JsonSerializer.Serialize(requestBodyObject);
-
-        using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
-
-        return JsonSerializer.Deserialize<ChatCompletion>(await response.Content.ReadAsStringAsync());
-    }
-
-    /// <summary>
-    /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
-    /// </summary>
-    /// <param name="messages">A list of messages describing the conversation so far.</param>
-    /// <param name="options">Options used to configure the API call.</param>
-    /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
-    public async Task<ChatCompletion?> GetChatCompletionFunc(Message[] messages, string functionsJsonSchema, ChatCompletionOptions? options = null)
+    private string InternalCreateRequestJson(Message[] messages, ChatCompletionOptions? options = null, bool streamResponse = false, params FunctionDefinition[]? functions)
     {
         options ??= _defaultChatCompletionOptions;
 
@@ -97,11 +73,18 @@ public sealed class ChatGPT
         string messagesJson = JsonSerializer.Serialize(messages, new JsonSerializerOptions() { WriteIndented = true });
         writer.WritePropertyName("messages");
         writer.WriteRawValue(messagesJson);
-
         writer.WriteNumber("temperature", options.Temperature);
+        writer.WriteBoolean("stream", streamResponse);
 
-        writer.WritePropertyName("functions");
-        writer.WriteRawValue(functionsJsonSchema);
+        if (functions != null && functions.Length > 0)
+        {
+            writer.WriteStartArray("functions");
+            for (int i = 0; i < functions.Length; i++)
+            {
+                writer.WriteRawValue(functions[i].ToJsonSchema());
+            }
+            writer.WriteEndArray();
+        }
 
         writer.WriteEndObject();
 
@@ -110,13 +93,70 @@ public sealed class ChatGPT
         using (var sr = new StreamReader(stream))
         {
             stream.Position = 0;
-            string requestBody = sr.ReadToEnd();
-
-            using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
-
-            string content = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<ChatCompletion>(content);
+            return sr.ReadToEnd();
         }
+    }
+
+    private async Task<ChatCompletion?> InternalHandleFunctionCall(Message[] messages, ChatCompletion chatCompletion, FunctionDefinition[] functions, ChatCompletionOptions? options)
+    {
+        _logger.Debug($"Function call requested '{chatCompletion?.Choices?[0].Message?.FunctionCall?.Name}' with {chatCompletion?.Choices?[0].Message?.FunctionCall?.Arguments.Count} arguments.");
+        var modelFunctionCall = chatCompletion?.Choices?[0].Message?.FunctionCall;
+
+        if (modelFunctionCall == null)
+        {
+            _logger.Debug("Function call requested by model but no function name provided.");
+            return null;
+        }
+
+        foreach (var functionDefinition in functions)
+        {
+            if (functionDefinition.Name == modelFunctionCall.Name)
+            {
+                // Execute the requested function.
+                string? functionResult = functionDefinition.RunFunction(modelFunctionCall.Arguments);
+
+                // Append the function response to the message history.
+                Message[] messagesWithFunctionOutput = new Message[messages.Length + 1];
+                messages.CopyTo(messagesWithFunctionOutput, 0);
+                messagesWithFunctionOutput[^1] = new Message() { Role = "function", Name = modelFunctionCall.Name, Content = functionResult };
+
+                // Create a new chat completion with the function result and return it.
+                return await GetChatCompletion(messagesWithFunctionOutput, options);
+            }
+        }
+
+        _logger.Debug("Requested function not found.");
+        return null;
+    }
+
+    /// <summary>
+    /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
+    /// </summary>
+    /// <param name="messages">A list of messages describing the conversation so far.</param>
+    /// <param name="options">Options used to configure the API call.</param>
+    /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
+    /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
+    public async Task<ChatCompletion?> GetChatCompletion(Message[] messages,
+                                                         ChatCompletionOptions? options = null,
+                                                         params FunctionDefinition[]? functions)
+    {
+        string requestBody = InternalCreateRequestJson(messages, options, false, functions);
+
+        using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
+
+        string content = await response.Content.ReadAsStringAsync();
+
+        var chatCompletion = JsonSerializer.Deserialize<ChatCompletion>(content);
+
+        // If the model wants to execute a function, we handle the entire function process before
+        // returning back to the user.
+        if (chatCompletion?.Choices?[0].FinishReason == "function_call"
+            && functions != null)
+        {
+            return await InternalHandleFunctionCall(messages, chatCompletion, functions, options);
+        }
+
+        return chatCompletion;
     }
 
     /// <summary>
@@ -125,21 +165,14 @@ public sealed class ChatGPT
     /// <param name="messages">A list of messages describing the conversation so far.</param>
     /// <param name="partialCompletionCallback">The callback function for each time a 'delta' <see cref="ChatCompletion"/> is received.</param>
     /// <param name="options">Options used to configure the API call.</param>
+    /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
     /// <returns>A <see cref="HttpStatusCode"/> which represents the response to the <i>POST</i> message.</returns>
-    public HttpStatusCode GetStreamingChatCompletion(Message[] messages, Action<ChatCompletion?> partialCompletionCallback, ChatCompletionOptions? options = null)
+    public HttpStatusCode GetStreamingChatCompletion(Message[] messages,
+                                                     Action<ChatCompletion?> partialCompletionCallback,
+                                                     ChatCompletionOptions? options = null,
+                                                     params FunctionDefinition[]? functions)
     {
-        options ??= _defaultChatCompletionOptions;
-
-        var requestBodyObject = new
-        {
-            // Do not try to optimize names here, the API needs the specific lower case names.
-            model = options.Model,
-            messages,
-            temperature = options.Temperature,
-            stream = true
-        };
-
-        string requestBody = JsonSerializer.Serialize(requestBodyObject);
+        string requestBody = InternalCreateRequestJson(messages, options, true, functions);
 
         _client.GetStreamingResponse(new HttpRequestMessage(HttpMethod.Post, new Uri(_requestUri)) { Content = new StringContent(requestBody, Encoding.UTF8, "application/json") },
                                      out HttpResponseMessage response,
