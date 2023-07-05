@@ -17,4 +17,8 @@
     <None Include="..\.editorconfig" Link=".editorconfig" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="NLog" Version="5.2.2" />
+  </ItemGroup>
+
 </Project>
