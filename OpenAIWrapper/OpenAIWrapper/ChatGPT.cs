@@ -1,7 +1,5 @@
 ﻿using NLog;
 using System;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -11,10 +9,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Zintom.OpenAIWrapper.Models;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Zintom.OpenAIWrapper;
 
+/// <summary>
+/// A wrapper around the ChatCompletions API.
+/// </summary>
 public sealed class ChatGPT
 {
     private readonly Logger _logger = LogManager.GetCurrentClassLogger();
@@ -36,10 +36,15 @@ public sealed class ChatGPT
 
     private readonly ChatCompletionOptions _defaultChatCompletionOptions = new();
 
+    /// <summary>
+    /// Configurable options for a ChatCompletion API call.
+    /// </summary>
     public sealed class ChatCompletionOptions
     {
         /// <summary>
         /// The ID of the model to use. See the <see href="https://platform.openai.com/docs/models/model-endpoint-compatibility">model endpoint compatibility</see> table for details on which models work with the Chat API.
+        /// <para/>
+        /// Also see <see cref="LanguageModels"/>.
         /// </summary>
         public string? Model = "gpt-3.5-turbo";
 
@@ -49,6 +54,11 @@ public sealed class ChatGPT
         public float Temperature = 0.7f;
     }
 
+    /// <summary>
+    /// Creates a new instance of the ChatCompletions API wrapper.
+    /// </summary>
+    /// <param name="apiKey"></param>
+    /// <param name="client"></param>
     public ChatGPT(string? apiKey, IHttpClient? client)
     {
         _client = client ?? new HttpClientWrapper();
@@ -172,6 +182,9 @@ public sealed class ChatGPT
                                                      ChatCompletionOptions? options = null,
                                                      params FunctionDefinition[]? functions)
     {
+        if (functions != null)
+            throw new NotImplementedException("Function calls do not currently work with streaming output.");
+
         string requestBody = InternalCreateRequestJson(messages, options, true, functions);
 
         _client.GetStreamingResponse(new HttpRequestMessage(HttpMethod.Post, new Uri(_requestUri)) { Content = new StringContent(requestBody, Encoding.UTF8, "application/json") },
