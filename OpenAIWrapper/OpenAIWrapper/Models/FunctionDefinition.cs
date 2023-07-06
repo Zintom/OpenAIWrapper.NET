@@ -10,7 +10,7 @@ namespace Zintom.OpenAIWrapper.Models;
 /// <para/>
 /// Use the <see cref="Builder"/> to instantiate this class.
 /// </summary>
-public partial class FunctionDefinition
+public sealed partial class FunctionDefinition
 {
     private string _name = "";
     private string _description = "";
@@ -40,7 +40,7 @@ public partial class FunctionDefinition
     /// <summary>
     /// Holds the details regarding a parameter for a function.
     /// </summary>
-    private class FunctionParameter
+    private sealed class FunctionParameter
     {
         internal readonly string _name;
         internal readonly string _type;
