@@ -62,7 +62,7 @@ public sealed class Choice
     public Message? Message { get; set; }
 
     /// <summary>
-    /// The message in this response (when streaming), see <see cref="ChatGPT.GetStreamingChatCompletion(Message[], System.Action{ChatCompletion?}, ChatGPT.ChatCompletionOptions?)">GetStreamingChatCompletion</see>.
+    /// The message in this response (when streaming), see <see cref="ChatGPT.GetStreamingChatCompletion(Message[], Action{ChatCompletion?}, ChatGPT.ChatCompletionOptions?, FunctionDefinition[])">GetStreamingChatCompletion</see>.
     /// </summary>
     [JsonPropertyName("delta")]
     public Message? Delta { get; set; }
@@ -168,7 +168,7 @@ public sealed class FunctionCallJsonConverter : JsonConverter<FunctionCall>
 {
     public override FunctionCall? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        FunctionCall functionCall = new FunctionCall();
+        FunctionCall functionCall = new();
 
         // Read PropertyName "name"
         if (!reader.Read() ||
