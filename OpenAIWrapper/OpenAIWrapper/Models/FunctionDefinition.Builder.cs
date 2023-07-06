@@ -3,12 +3,12 @@ using System.Collections.Generic;
 
 namespace Zintom.OpenAIWrapper.Models;
 
-public partial class FunctionDefinition
+public sealed partial class FunctionDefinition
 {
     /// <summary>
     /// Builder class to create a <see cref="FunctionDefinition"/>.
     /// </summary>
-    public class Builder
+    public sealed class Builder
     {
         private readonly FunctionDefinition _functionDefinition;
 
