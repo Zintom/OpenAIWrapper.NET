@@ -89,10 +89,11 @@ public sealed partial class FunctionDefinition
         if (_method == null)
             throw new InvalidOperationException("This function-definition does not have a defined function (delegate) to run.");
 
-        // Compile array of parameters.
+        // Create an array of objects to hold the arguments for the dynamic function call.
+        // We use the number of parameters the function is EXPECTING, not the amount provided by the model.
         object?[] argumentObjects = new object[_method.Method.GetParameters().Length];
 
-        // Deliberately leaves any non-set parameters to null (they are optional, but must be provided to dynamic invoke).
+        // Deliberately leaves any non-set parameters to null (they are optional, but must be provided to dynamic invoke or the call will fail).
         for (int i = 0; i < arguments.Count; i++)
         {
             argumentObjects[i] = arguments[i].Value;
