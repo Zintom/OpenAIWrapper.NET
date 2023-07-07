@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 
 namespace Zintom.OpenAIWrapper.Models;
@@ -42,64 +44,59 @@ public sealed partial class FunctionDefinition
     /// </summary>
     private sealed class FunctionParameter
     {
-        internal readonly string _name;
-        internal readonly string _type;
-        internal readonly string? _description;
-        internal readonly string[]? _enumValues;
-        internal readonly bool _required;
-
-        /// <summary>
-        /// Create a function parameter which is a standard (non-enum) type.
-        /// </summary>
-        /// <param name="name">The name of the parameter.</param>
-        /// <param name="type">The type of the parameter, such as 'integer', or 'string'.</param>
-        /// <param name="description">The description of the parameter.</param>
-        /// <param name="isRequired">Dictates whether this parameter is mandatory.</param>
-        internal FunctionParameter(string name, string type, string description, bool isRequired)
-        {
-            _name = name;
-            _type = type;
-            _description = description;
-            _required = isRequired;
-        }
-
-        /// <summary>
-        /// Create a function parameter which is an enum.
-        /// </summary>
-        /// <param name="name">The name of the parameter.</param>
-        /// <param name="isRequired">Dictates whether this parameter is mandatory.</param>
-        /// <param name="enumValues"></param>
-        internal FunctionParameter(string name, bool isRequired, params string[]? enumValues)
-        {
-            _name = name;
-            _type = "string";
-            _enumValues = enumValues;
-            _required = isRequired;
-        }
+        internal required string _name;
+        internal required string _type;
+        internal string? _description;
+        internal string[]? _enumValues;
+        internal bool _required;
+        internal bool isBoolean = false;
     }
 
     /// <summary>
-    /// Runs the function which was bound to this definition using the given <paramref name="arguments"/>.
+    /// Runs the function which was bound to this definition using the given <paramref name="modelGivenArguments"/>.
     /// </summary>
-    /// <param name="arguments"></param>
+    /// <param name="modelGivenArguments"></param>
     /// <returns></returns>
     /// <exception cref="InvalidOperationException"></exception>
-    public string? RunFunction(List<FunctionCall.ArgumentDefinition> arguments)
+    public string? RunFunction(List<FunctionCall.ArgumentDefinition> modelGivenArguments)
     {
         if (_method == null)
-            throw new InvalidOperationException("This function-definition does not have a defined function (delegate) to run.");
+            throw new InvalidOperationException("This function-definition does not have a defined function (delegate) to invoke.");
+
+        var methodParameters = _method.Method.GetParameters();
 
         // Create an array of objects to hold the arguments for the dynamic function call.
         // We use the number of parameters the function is EXPECTING, not the amount provided by the model.
-        object?[] argumentObjects = new object[_method.Method.GetParameters().Length];
+        object?[] argumentObjects = new object[methodParameters.Length];
 
         // Deliberately leaves any non-set parameters to null (they are optional, but must be provided to dynamic invoke or the call will fail).
-        for (int i = 0; i < arguments.Count; i++)
+        for (int i = 0; i < modelGivenArguments.Count; i++)
         {
-            argumentObjects[i] = arguments[i].Value;
+            // The model does not provide actual boolean values, it provides the 'string'
+            // representation "true" or "false", so, if the parameter we are providing is a boolean,
+            // we parse that 'string' provided by the model into an actual boolean value.
+            if (methodParameters[i].ParameterType == typeof(bool) &&
+                bool.TryParse(modelGivenArguments[i].Value?.ToString(), out bool parsedBool))
+            {
+                argumentObjects[i] = parsedBool;
+                continue;
+            }
+
+            argumentObjects[i] = modelGivenArguments[i].Value;
         }
 
-        return (string?)(_method?.DynamicInvoke(argumentObjects));
+        try
+        {
+            return (string?)(_method?.DynamicInvoke(argumentObjects));
+        }
+        catch (TargetInvocationException e)
+        {
+            NLog.LogManager.GetCurrentClassLogger().Debug(
+                $"Function call failed '{nameof(TargetInvocationException)}'\nMessage: '{e.Message}'\nInnerException Message: '{e.InnerException?.Message}'\n" +
+                $"Model Provided Arguments: {string.Join(',', modelGivenArguments.Select((definition) => $"{{ Name: '{definition.Name}', Value: '{definition.Value}', Type: '{definition.Type}' }}"))}");
+
+            return $"Function call failed due to invalid parameters provided by the language model, the error message is: {e.InnerException?.Message}. Please try the function call again.";
+        }
     }
 
     /// <summary>
@@ -137,7 +134,17 @@ public sealed partial class FunctionDefinition
             writer.WriteStartObject(parameter._name);
 
             writer.WriteString("type", parameter._type);
-            if (parameter._enumValues == null)
+            if (parameter.isBoolean)
+            {
+                // A boolean is a fancy enum with values "true" or "false"
+                writer.WriteStartArray("enum");
+
+                writer.WriteStringValue("true");
+                writer.WriteStringValue("false");
+
+                writer.WriteEndArray();
+            }
+            else if (parameter._enumValues == null)
             {
                 // We are dealing with a non-enum type.
                 writer.WriteString("description", parameter._description);

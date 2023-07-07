@@ -52,10 +52,17 @@ public sealed partial class FunctionDefinition
         /// <param name="type">One of <see cref="FunctionCall.ArgumentType"/></param>
         /// <param name="description">The description of the parameter.</param>
         /// <param name="isRequired">Indicates to the model if the parameter is required.</param>
-        /// <returns></returns>
         public Builder AddParameter(string name, string type, string description, bool isRequired)
         {
-            _parameters.Add(new FunctionParameter(name, type, description, isRequired));
+            var parameter = new FunctionParameter()
+            {
+                _name = name,
+                _type = type,
+                _description = description,
+                _required = isRequired
+            };
+
+            _parameters.Add(parameter);
 
             return this;
         }
@@ -64,12 +71,43 @@ public sealed partial class FunctionDefinition
         /// Adds an enum parameter to the function.
         /// </summary>
         /// <param name="name">The name of the parameter.</param>
+        /// <param name="description"><i>(Optional)</i> The description of the parameter.</param>
         /// <param name="isRequired">Indicates to the model if the parameter is required.</param>
-        /// <param name="enumValues">The possible values of the parameter, such as { "Yes", "No" }.</param>
-        /// <returns></returns>
-        public Builder AddParameter(string name, bool isRequired, params string[]? enumValues)
+        /// <param name="enumValues">The possible values of the parameter, such as { "celsius", "fahrenheit" }.</param>
+        public Builder AddParameter(string name, string? description, bool isRequired, params string[] enumValues)
         {
-            _parameters.Add(new FunctionParameter(name, isRequired, enumValues));
+            var parameter = new FunctionParameter()
+            {
+                _name = name,
+                _type = "string",
+                _description = description,
+                _enumValues = enumValues,
+                _required = isRequired
+            };
+
+            _parameters.Add(parameter);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Adds a boolean parameter to the function.
+        /// </summary>
+        /// <param name="name">The name of the parameter.</param>
+        /// <param name="description"><i>(Optional)</i> The description of the parameter.</param>
+        /// <param name="isRequired">Indicates to the model if the parameter is required.</param>
+        public Builder AddBooleanParameter(string name, string? description, bool isRequired)
+        {
+            var parameter = new FunctionParameter()
+            {
+                _name = name,
+                _type = "string",
+                _description = description,
+                _required = isRequired,
+                isBoolean = true
+            };
+
+            _parameters.Add(parameter);
 
             return this;
         }
