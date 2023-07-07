@@ -1,5 +1,6 @@
 ﻿using NLog;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -69,7 +70,7 @@ public sealed class ChatGPT
         API_Key = apiKey;
     }
 
-    private string InternalCreateRequestJson(Message[] messages, ChatCompletionOptions? options = null, bool streamResponse = false, params FunctionDefinition[]? functions)
+    private string InternalCreateRequestJson(List<Message> messages, ChatCompletionOptions? options = null, bool streamResponse = false, params FunctionDefinition[]? functions)
     {
         options ??= _defaultChatCompletionOptions;
 
@@ -107,16 +108,17 @@ public sealed class ChatGPT
         }
     }
 
-    private async Task<ChatCompletion?> InternalHandleFunctionCall(Message[] messages, ChatCompletion chatCompletion, FunctionDefinition[] functions, ChatCompletionOptions? options)
+    private void InternalHandleFunctionCall(List<Message> messages, ChatCompletion chatCompletion, FunctionDefinition[] functions, ChatCompletionOptions? options)
     {
-        _logger.Debug($"Function call requested '{chatCompletion?.Choices?[0].Message?.FunctionCall?.Name}' with {chatCompletion?.Choices?[0].Message?.FunctionCall?.Arguments.Count} arguments.");
-        var modelFunctionCall = chatCompletion?.Choices?[0].Message?.FunctionCall;
-
+        FunctionCall? modelFunctionCall = chatCompletion?.Choices?[0].Message?.FunctionCall;
         if (modelFunctionCall == null)
         {
-            _logger.Debug("Function call requested by model but no function name provided.");
-            return null;
+            _logger.Debug("Model provided a function call that was null.");
+            return;
         }
+
+        _logger.Debug($"Function call requested '{chatCompletion?.Choices?[0].Message?.FunctionCall?.Name}'" +
+            $"\nArgs: {string.Join(",", modelFunctionCall.Arguments.Select((definition) => $"\n--> {{ Name: '{definition.Name}', Value: '{definition.Value}', Type: '{definition.Type}' }}"))}");
 
         foreach (var functionDefinition in functions)
         {
@@ -124,19 +126,15 @@ public sealed class ChatGPT
             {
                 // Execute the requested function.
                 string? functionResult = functionDefinition.RunFunction(modelFunctionCall.Arguments);
+                _logger.Debug($"Function result: '{functionResult}'");
 
                 // Append the function response to the message history.
-                Message[] messagesWithFunctionOutput = new Message[messages.Length + 1];
-                messages.CopyTo(messagesWithFunctionOutput, 0);
-                messagesWithFunctionOutput[^1] = new Message() { Role = "function", Name = modelFunctionCall.Name, Content = functionResult };
-
-                // Create a new chat completion with the function result and return it.
-                return await GetChatCompletion(messagesWithFunctionOutput, options);
+                messages.Add(new Message() { Role = "function", Name = modelFunctionCall.Name, Content = functionResult });
+                return;
             }
         }
 
         _logger.Debug("Requested function not found.");
-        return null;
     }
 
     /// <summary>
@@ -146,27 +144,52 @@ public sealed class ChatGPT
     /// <param name="options">Options used to configure the API call.</param>
     /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
     /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
-    public async Task<ChatCompletion?> GetChatCompletion(Message[] messages,
+    public async Task<ChatCompletion?> GetChatCompletion(List<Message> messages,
                                                          ChatCompletionOptions? options = null,
                                                          params FunctionDefinition[]? functions)
     {
-        string requestBody = InternalCreateRequestJson(messages, options, false, functions);
-
-        using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
-
-        string content = await response.Content.ReadAsStringAsync();
-
-        var chatCompletion = JsonSerializer.Deserialize<ChatCompletion>(content);
-
-        // If the model wants to execute a function, we handle the entire function process before
-        // returning back to the user.
-        if (chatCompletion?.Choices?[0].FinishReason == "function_call"
-            && functions != null)
+        while (true)
         {
-            return await InternalHandleFunctionCall(messages, chatCompletion, functions, options);
-        }
+            string requestBody = InternalCreateRequestJson(messages, options, false, functions);
 
-        return chatCompletion;
+            using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
+
+            string content = await response.Content.ReadAsStringAsync();
+
+            var chatCompletion = JsonSerializer.Deserialize<ChatCompletion>(content);
+
+            // If the model wants to execute a function, we handle the entire function process before
+            // returning back to the user.
+
+            if (chatCompletion?.Choices?[0].FinishReason == "function_call"
+                && functions != null)
+            {
+                // Prevent infinite loops by supressing any further function calls
+                // If the model has called the same function and has got the same response twice.
+                if (messages.Count >= 2)
+                {
+                    var lastMessage = messages[^1];
+                    var secondToLastMessage = messages[^2];
+                    if (lastMessage.Role == "function" && secondToLastMessage.Role == "function" &&
+                        lastMessage.Name == secondToLastMessage.Name &&
+                        lastMessage.Content == secondToLastMessage.Content)
+                    {
+                        // This function was called identically already which means there is an infinite loop.
+                        messages.Add(new Message() { Role = "assistant", Content = "[Internal Thought] I've already called that function and have had the same response back, there must be an error somewhere." });
+
+                        // Set the available functions to null so that the AI can't call any more for this completion.
+                        functions = null;
+                        continue;
+                    }
+                }
+
+                InternalHandleFunctionCall(messages, chatCompletion, functions, options);
+            }
+            else
+            {
+                return chatCompletion;
+            }
+        }
     }
 
     /// <summary>
@@ -177,7 +200,7 @@ public sealed class ChatGPT
     /// <param name="options">Options used to configure the API call.</param>
     /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
     /// <returns>A <see cref="HttpStatusCode"/> which represents the response to the <i>POST</i> message.</returns>
-    public HttpStatusCode GetStreamingChatCompletion(Message[] messages,
+    public HttpStatusCode GetStreamingChatCompletion(List<Message> messages,
                                                      Action<ChatCompletion?> partialCompletionCallback,
                                                      ChatCompletionOptions? options = null,
                                                      params FunctionDefinition[]? functions)
