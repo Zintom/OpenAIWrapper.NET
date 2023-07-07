@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
@@ -23,7 +24,7 @@ public class TestGpt
         var finalStringBuilder = new StringBuilder();
 
         // Act
-        gpt.GetStreamingChatCompletion(new Zintom.OpenAIWrapper.Models.Message[] { new Zintom.OpenAIWrapper.Models.Message() { Role = "user", Content = "Hello!" } }, (cp) =>
+        gpt.GetStreamingChatCompletion(new List<Zintom.OpenAIWrapper.Models.Message> { new Zintom.OpenAIWrapper.Models.Message() { Role = "user", Content = "Hello!" } }, (cp) =>
         {
             if (string.IsNullOrEmpty(cp!.Choices![0].Delta?.Role))
             {
