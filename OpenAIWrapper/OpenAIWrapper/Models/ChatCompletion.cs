@@ -104,7 +104,7 @@ public sealed class Message
     /// <summary>
     /// The contents of the message. <c>Content</c> is required for all messages except assistant messages with function calls.
     /// </summary>
-    [JsonPropertyName("content")]
+    [JsonPropertyName("content"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Content { get; set; }
 
     /// <summary>
@@ -259,7 +259,41 @@ public sealed class FunctionCallJsonConverter : JsonConverter<FunctionCall>
 
     public override void Write(Utf8JsonWriter writer, FunctionCall value, JsonSerializerOptions options)
     {
-        throw new InvalidOperationException($"Writing a {nameof(FunctionCall)} is not necessary in the spec of the ChatCompletions api.");
+        throw new InvalidOperationException($"Writing a {nameof(FunctionCall)} is not relevant in the ChatCompletions API, you only need to provide the function result.");
+
+        /*
+        writer.WriteStartObject();
+
+        writer.WriteString("name", value.Name);
+
+        using (var argumentWriterStream = new MemoryStream())
+        using (var argumentWriter = new Utf8JsonWriter(argumentWriterStream, new JsonWriterOptions() { Indented = false }))
+        {
+            argumentWriter.WriteStartObject();
+            foreach (var argument in value.Arguments)
+            {
+                if (argument.Type == FunctionCall.ArgumentType.Number)
+                {
+                    argumentWriter.WriteNumber(argument.Name, (double)(argument.Value ?? 0));
+                }
+                if (argument.Type == FunctionCall.ArgumentType.String)
+                {
+                    argumentWriter.WriteString(argument.Name, argument.Value?.ToString() ?? "");
+                }
+            }
+
+            argumentWriter.WriteEndObject();
+            argumentWriter.Flush();
+
+            using (var reader = new StreamReader(argumentWriterStream, Encoding.UTF8, leaveOpen: true))
+            {
+                argumentWriterStream.Position = 0;
+                writer.WritePropertyName("arguments");
+                writer.WriteRawValue("\"" + reader.ReadToEnd().Replace("\"", "\\\"") + "\"", true);
+            }
+        }
+        writer.WriteEndObject();
+        */
     }
 }
 
