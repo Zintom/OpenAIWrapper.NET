@@ -74,13 +74,13 @@ public sealed class ChatGPT
         options ??= _defaultChatCompletionOptions;
 
         using var stream = new MemoryStream();
-        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions() { Indented = true });
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions() { Indented = false });
 
         writer.WriteStartObject();
 
         writer.WriteString("model", options.Model);
 
-        string messagesJson = JsonSerializer.Serialize(messages, new JsonSerializerOptions() { WriteIndented = true });
+        string messagesJson = JsonSerializer.Serialize(messages, new JsonSerializerOptions() { WriteIndented = false });
         writer.WritePropertyName("messages");
         writer.WriteRawValue(messagesJson);
         writer.WriteNumber("temperature", options.Temperature);

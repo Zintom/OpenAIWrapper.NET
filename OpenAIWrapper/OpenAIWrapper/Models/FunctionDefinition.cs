@@ -114,7 +114,7 @@ public sealed partial class FunctionDefinition
             return _jsonSchema;
 
         using MemoryStream stream = new();
-        using Utf8JsonWriter writer = new(stream, new JsonWriterOptions() { Indented = true });
+        using Utf8JsonWriter writer = new(stream, new JsonWriterOptions() { Indented = false });
 
         writer.WriteStartObject();
         writer.WriteString("name", _name);
