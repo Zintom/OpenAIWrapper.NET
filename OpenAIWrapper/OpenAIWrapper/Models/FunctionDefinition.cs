@@ -39,6 +39,105 @@ public sealed partial class FunctionDefinition
     /// </summary>
     private FunctionDefinition() { }
 
+    public static FunctionDefinition FromMethod(Delegate method)
+    {
+        var methodInfo = method.GetMethodInfo();
+        var methodParameters = methodInfo.GetParameters();
+
+        var functionDefinition = new FunctionDefinition() { _name = methodInfo.Name, _method = method };
+
+        // Assign function description from MethodInfo.
+        functionDefinition._description = GetAttribute<FunctionDescriptionAttribute>(methodInfo)?._description ?? throw new ModelRequiredAttributeMissingException(typeof(FunctionDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name);
+
+        // Process all the method parameters.
+        functionDefinition._parameters = new();
+        foreach (var methodParameter in methodParameters)
+        {
+            string type = methodParameter.ParameterType.Name;
+            if (IsNumericType(methodParameter.ParameterType))
+            {
+                type = "Number";
+            }
+
+            var p = new FunctionParameter()
+            {
+                _name = methodParameter.Name ?? "",
+                _type = type
+            };
+
+            if (methodParameter.ParameterType == typeof(bool))
+                p.isBoolean = true;
+
+            var descriptionAttr = GetAttribute<ParamDescriptionAttribute>(methodParameter);
+            p._description = descriptionAttr?._description ?? throw new ModelRequiredAttributeMissingException(typeof(ParamDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name, $"({methodParameter.ParameterType.Name}) {methodParameter.Name}");
+            p._required = descriptionAttr?._required ?? false;
+
+            var enumAttr = GetAttribute<EnumValuesAttribute>(methodParameter);
+            p._enumValues = enumAttr?._possibleEnumValues;
+
+            functionDefinition._parameters.Add(p);
+        }
+
+        return functionDefinition;
+    }
+
+    public class ModelRequiredAttributeMissingException : Exception
+    {
+        public ModelRequiredAttributeMissingException(Type attributeType, string? methodName = null, string? parameterName = null, string? parameterType = null) : base(GetMessage(attributeType, methodName, parameterName, parameterType))
+        {
+
+        }
+
+        private static string GetMessage(Type attributeType, string? method = null, string? parameter = null, string? parameterType = null)
+        {
+            if (attributeType == typeof(FunctionDescriptionAttribute))
+            {
+                return $"Error on method '{method}'. A description of the function is required. Endorse the method with the {nameof(FunctionDescriptionAttribute)}.";
+            }
+            else if (attributeType == typeof(ParamDescriptionAttribute))
+            {
+                return $"Error on parameter '{parameter}' on method '{method}'. A description of all parameters (excluding string-enums) is required by the model. Endorse all parameters (excluding string-enums) with the {nameof(ParamDescriptionAttribute)}.";
+            }
+            else if (attributeType == typeof(EnumValuesAttribute))
+            {
+                return $"A set of enum options must be made available to the model. Endorse all intended enum parameters with the {nameof(EnumValuesAttribute)}.";
+            }
+
+            return $"{nameof(ModelRequiredAttributeMissingException)}";
+        }
+    }
+
+    private static bool IsNumericType(Type t)
+    {
+        switch (Type.GetTypeCode(t))
+        {
+            case TypeCode.Byte:
+            case TypeCode.SByte:
+            case TypeCode.UInt16:
+            case TypeCode.UInt32:
+            case TypeCode.UInt64:
+            case TypeCode.Int16:
+            case TypeCode.Int32:
+            case TypeCode.Int64:
+            case TypeCode.Decimal:
+            case TypeCode.Double:
+            case TypeCode.Single:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static T? GetAttribute<T>(ICustomAttributeProvider info) where T : Attribute
+    {
+        foreach (var attr in info.GetCustomAttributes(typeof(T), false))
+        {
+            return (T?)attr;
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Holds the details regarding a parameter for a function.
     /// </summary>
