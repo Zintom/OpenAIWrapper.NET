@@ -58,9 +58,9 @@ public sealed class ChatGPT
     /// <summary>
     /// Creates a new instance of the ChatCompletions API wrapper.
     /// </summary>
-    /// <param name="apiKey"></param>
-    /// <param name="client"></param>
-    public ChatGPT(string? apiKey, IHttpClient? client)
+    /// <param name="apiKey">Your OpenAI API key.</param>
+    /// <param name="client">Leave as <see langword="null"/> and it will create one for you.</param>
+    public ChatGPT(string? apiKey, IHttpClient? client = null)
     {
         _client = client ?? new HttpClientWrapper();
         _client.DefaultRequestHeaders.Accept.Clear();
