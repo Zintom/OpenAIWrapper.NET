@@ -101,10 +101,9 @@ public sealed partial class FunctionDefinition
             var parameter = new FunctionParameter()
             {
                 _name = name,
-                _type = "string",
+                _type = "boolean",
                 _description = description,
-                _required = isRequired,
-                isBoolean = true
+                _required = isRequired
             };
 
             _parameters.Add(parameter);
@@ -119,7 +118,7 @@ public sealed partial class FunctionDefinition
         public FunctionDefinition Build()
         {
             _functionDefinition._parameters = _parameters;
-            _functionDefinition._method = _method;
+            _functionDefinition._targetMethod = _method;
 
             return _functionDefinition;
         }
