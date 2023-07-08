@@ -108,7 +108,7 @@ public sealed class ChatGPT
         }
     }
 
-    private void InternalHandleFunctionCall(List<Message> messages, ChatCompletion chatCompletion, FunctionDefinition[] functions, ChatCompletionOptions? options)
+    private void InternalHandleFunctionCall(List<Message> messages, ChatCompletion chatCompletion, FunctionDefinition[] functions)
     {
         FunctionCall? modelFunctionCall = chatCompletion?.Choices?[0].Message?.FunctionCall;
         if (modelFunctionCall == null)
@@ -118,7 +118,9 @@ public sealed class ChatGPT
         }
 
         _logger.Debug($"Function call requested '{chatCompletion?.Choices?[0].Message?.FunctionCall?.Name}'" +
-            $"\nArgs: {string.Join(",", modelFunctionCall.Arguments.Select((definition) => $"\n--> {{ Name: '{definition.Name}', Value: '{definition.Value}', Type: '{definition.Type}' }}"))}");
+            $"\nArgs: {string.Join(",", modelFunctionCall.Arguments.Select((definition) => $"\n--> {{ Name: '{definition.Name}', Value: '{Encoding.UTF8.GetString(definition.RawValue)}', Type: '{definition.Type}' }}"))}");
+
+        // ENSURE ENUM VALUES ARE VALID!
 
         foreach (var functionDefinition in functions)
         {
@@ -137,6 +139,17 @@ public sealed class ChatGPT
         _logger.Debug("Requested function not found.");
     }
 
+
+    /// <inheritdoc cref="GetChatCompletion(List{Message}, ChatCompletionOptions?, FunctionDefinition[])"/>
+    public Task<ChatCompletion?> GetChatCompletion(List<Message> messages,
+                                                         ChatCompletionOptions? options = null,
+                                                         params Delegate[]? functions)
+    {
+        return GetChatCompletion(messages,
+                                 options,
+                                 functions != null ? Array.ConvertAll(functions, new Converter<Delegate, FunctionDefinition>(FunctionDefinition.FromMethod)) : null);
+    }
+
     /// <summary>
     /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
     /// </summary>
@@ -145,8 +158,8 @@ public sealed class ChatGPT
     /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
     /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
     public async Task<ChatCompletion?> GetChatCompletion(List<Message> messages,
-                                                         ChatCompletionOptions? options = null,
-                                                         params FunctionDefinition[]? functions)
+                                                     ChatCompletionOptions? options = null,
+                                                     params FunctionDefinition[]? functions)
     {
         while (true)
         {
@@ -155,6 +168,11 @@ public sealed class ChatGPT
             using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
 
             string content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"OpenAI responded with status code '{response.StatusCode} ({(int)response.StatusCode})', Message: '{content}'");
+            }
 
             var chatCompletion = JsonSerializer.Deserialize<ChatCompletion>(content);
 
@@ -183,7 +201,7 @@ public sealed class ChatGPT
                     }
                 }
 
-                InternalHandleFunctionCall(messages, chatCompletion, functions, options);
+                InternalHandleFunctionCall(messages, chatCompletion, functions);
             }
             else
             {
