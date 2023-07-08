@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using static Zintom.OpenAIWrapper.Misc.ReflectionHelpers;
 
 namespace Zintom.OpenAIWrapper.Models;
 
@@ -47,16 +48,30 @@ public sealed partial class FunctionDefinition
         var functionDefinition = new FunctionDefinition() { _name = methodInfo.Name, _method = method };
 
         // Assign function description from MethodInfo.
-        functionDefinition._description = GetAttribute<FunctionDescriptionAttribute>(methodInfo)?._description ?? throw new ModelRequiredAttributeMissingException(typeof(FunctionDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name);
+        functionDefinition._description = GetCustomAttributeFirstOrNull<FunctionDescriptionAttribute>(methodInfo)?._description ?? throw new ModelRequiredAttributeMissingException(typeof(FunctionDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name);
 
         // Process all the method parameters.
         functionDefinition._parameters = new();
         foreach (var methodParameter in methodParameters)
         {
-            string type = methodParameter.ParameterType.Name;
-            if (IsNumericType(methodParameter.ParameterType))
+            string? type = null;
+
+            /*
+             * Integer vs Number
+             * https://json-schema.org/understanding-json-schema/reference/numeric.html
+             */
+
+            if (IsWholeNumber(methodParameter.ParameterType))
             {
-                type = "Number";
+                type = "integer";
+            }
+            else if (IsFloatingPointNumber(methodParameter.ParameterType))
+            {
+                type = "number";
+            }
+            else
+            {
+                type = methodParameter.ParameterType.Name.ToLower();
             }
 
             var p = new FunctionParameter()
@@ -68,11 +83,11 @@ public sealed partial class FunctionDefinition
             if (methodParameter.ParameterType == typeof(bool))
                 p.isBoolean = true;
 
-            var descriptionAttr = GetAttribute<ParamDescriptionAttribute>(methodParameter);
+            var descriptionAttr = GetCustomAttributeFirstOrNull<ParamDescriptionAttribute>(methodParameter);
             p._description = descriptionAttr?._description ?? throw new ModelRequiredAttributeMissingException(typeof(ParamDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name, $"({methodParameter.ParameterType.Name}) {methodParameter.Name}");
             p._required = descriptionAttr?._required ?? false;
 
-            var enumAttr = GetAttribute<EnumValuesAttribute>(methodParameter);
+            var enumAttr = GetCustomAttributeFirstOrNull<EnumValuesAttribute>(methodParameter);
             p._enumValues = enumAttr?._possibleEnumValues;
 
             functionDefinition._parameters.Add(p);
@@ -105,37 +120,6 @@ public sealed partial class FunctionDefinition
 
             return $"{nameof(ModelRequiredAttributeMissingException)}";
         }
-    }
-
-    private static bool IsNumericType(Type t)
-    {
-        switch (Type.GetTypeCode(t))
-        {
-            case TypeCode.Byte:
-            case TypeCode.SByte:
-            case TypeCode.UInt16:
-            case TypeCode.UInt32:
-            case TypeCode.UInt64:
-            case TypeCode.Int16:
-            case TypeCode.Int32:
-            case TypeCode.Int64:
-            case TypeCode.Decimal:
-            case TypeCode.Double:
-            case TypeCode.Single:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private static T? GetAttribute<T>(ICustomAttributeProvider info) where T : Attribute
-    {
-        foreach (var attr in info.GetCustomAttributes(typeof(T), false))
-        {
-            return (T?)attr;
-        }
-
-        return null;
     }
 
     /// <summary>
