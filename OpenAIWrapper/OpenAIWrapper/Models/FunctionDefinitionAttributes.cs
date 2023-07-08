@@ -26,7 +26,7 @@ public class FunctionDescriptionAttribute : Attribute
 [AttributeUsage(AttributeTargets.Parameter)]
 public class ParamDescriptionAttribute : Attribute
 {
-    internal readonly string _description;
+    internal readonly string? _description;
     internal readonly bool _required;
 
     /// <summary>
@@ -34,7 +34,7 @@ public class ParamDescriptionAttribute : Attribute
     /// </summary>
     /// <param name="description">The description of this parameter to the model.</param>
     /// <param name="required">Indicates to the model if this parameter is required.</param>
-    public ParamDescriptionAttribute(string description, bool required = false)
+    public ParamDescriptionAttribute(string? description = null, bool required = false)
     {
         _description = description;
         _required = required;
