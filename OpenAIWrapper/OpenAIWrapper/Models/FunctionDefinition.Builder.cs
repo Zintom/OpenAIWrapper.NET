@@ -74,7 +74,7 @@ public sealed partial class FunctionDefinition
         /// <param name="description"><i>(Optional)</i> The description of the parameter.</param>
         /// <param name="isRequired">Indicates to the model if the parameter is required.</param>
         /// <param name="enumValues">The possible values of the parameter, such as { "celsius", "fahrenheit" }.</param>
-        public Builder AddParameter(string name, string? description, bool isRequired, params string[] enumValues)
+        public Builder AddParameter(string name, string? description, bool isRequired, params object[] enumValues)
         {
             var parameter = new FunctionParameter()
             {
