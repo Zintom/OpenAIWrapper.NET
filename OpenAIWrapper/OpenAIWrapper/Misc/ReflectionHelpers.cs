@@ -11,8 +11,9 @@ internal static class ReflectionHelpers
     /// Determines if the given <see cref="Type"/> <paramref name="t"/> is a 'whole' number.
     /// </summary>
     /// <param name="t">The type</param>
-    internal static bool IsWholeNumber(Type t)
+    internal static bool IsIntegralNumber(Type t)
     {
+        // https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/integral-numeric-types
         switch (Type.GetTypeCode(t))
         {
             case TypeCode.Byte:
@@ -35,6 +36,7 @@ internal static class ReflectionHelpers
     /// <param name="t">The type</param>
     internal static bool IsFloatingPointNumber(Type t)
     {
+        // https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/floating-point-numeric-types
         switch (Type.GetTypeCode(t))
         {
             case TypeCode.Decimal:
