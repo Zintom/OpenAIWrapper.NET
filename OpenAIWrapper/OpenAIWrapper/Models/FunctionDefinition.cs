@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using static Zintom.OpenAIWrapper.Misc.ReflectionHelpers;
 
@@ -18,7 +19,7 @@ public sealed partial class FunctionDefinition
     private string _name = "";
     private string _description = "";
     private List<FunctionParameter> _parameters = null!; // The only way to get an instance of FunctionDefinition is going through the builder, which sets this field.
-    private Delegate? _method;
+    private Delegate? _targetMethod;
 
     /// <summary>
     /// Cache to store the JSON schema after using ToJsonSchema so that it only calculates it once.
@@ -40,12 +41,20 @@ public sealed partial class FunctionDefinition
     /// </summary>
     private FunctionDefinition() { }
 
+    /// <summary>
+    /// Generates a <see cref="FunctionDefinition"/> from the given <paramref name="method"/>.
+    /// <para/>
+    /// <paramref name="method"/> must be annotated with the relevant <see cref="FunctionDescriptionAttribute"/>, <see cref="ParamDescriptionAttribute"/>, and <see cref="EnumValuesAttribute"/>.
+    /// </summary>
+    /// <param name="method"></param>
+    /// <returns></returns>
+    /// <exception cref="ModelRequiredAttributeMissingException"></exception>
     public static FunctionDefinition FromMethod(Delegate method)
     {
         var methodInfo = method.GetMethodInfo();
         var methodParameters = methodInfo.GetParameters();
 
-        var functionDefinition = new FunctionDefinition() { _name = methodInfo.Name, _method = method };
+        var functionDefinition = new FunctionDefinition() { _name = methodInfo.Name, _targetMethod = method };
 
         // Assign function description from MethodInfo.
         functionDefinition._description = GetCustomAttributeFirstOrNull<FunctionDescriptionAttribute>(methodInfo)?._description ?? throw new ModelRequiredAttributeMissingException(typeof(FunctionDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name);
@@ -61,7 +70,7 @@ public sealed partial class FunctionDefinition
              * https://json-schema.org/understanding-json-schema/reference/numeric.html
              */
 
-            if (IsWholeNumber(methodParameter.ParameterType))
+            if (IsIntegralNumber(methodParameter.ParameterType))
             {
                 type = "integer";
             }
@@ -69,9 +78,13 @@ public sealed partial class FunctionDefinition
             {
                 type = "number";
             }
+            else if (methodParameter.ParameterType == typeof(bool))
+            {
+                type = "boolean";
+            }
             else
             {
-                type = methodParameter.ParameterType.Name.ToLower();
+                type = "string";
             }
 
             var p = new FunctionParameter()
@@ -80,15 +93,21 @@ public sealed partial class FunctionDefinition
                 _type = type
             };
 
-            if (methodParameter.ParameterType == typeof(bool))
-                p.isBoolean = true;
-
             var descriptionAttr = GetCustomAttributeFirstOrNull<ParamDescriptionAttribute>(methodParameter);
-            p._description = descriptionAttr?._description ?? throw new ModelRequiredAttributeMissingException(typeof(ParamDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name, $"({methodParameter.ParameterType.Name}) {methodParameter.Name}");
+            p._description = descriptionAttr?._description;
+
             p._required = descriptionAttr?._required ?? false;
 
             var enumAttr = GetCustomAttributeFirstOrNull<EnumValuesAttribute>(methodParameter);
             p._enumValues = enumAttr?._possibleEnumValues;
+
+            if (string.IsNullOrEmpty(p._description) && // No description
+                (type != "string" || p._enumValues?.Length == 0) && // Not an enum
+                type != "boolean") // Not a boolean
+            {
+                // The model requires a description on non-enum, non-boolean values.
+                throw new ModelRequiredAttributeMissingException(typeof(ParamDescriptionAttribute), methodInfo.DeclaringType?.FullName + "." + methodInfo.Name, $"({methodParameter.ParameterType.Name}) {methodParameter.Name}");
+            }
 
             functionDefinition._parameters.Add(p);
         }
@@ -96,8 +115,12 @@ public sealed partial class FunctionDefinition
         return functionDefinition;
     }
 
+    /// <summary>
+    /// An exception when an attribute was not applied on a method or parameter and a language model requires it.
+    /// </summary>
     public class ModelRequiredAttributeMissingException : Exception
     {
+        /// <inheritdoc cref="ModelRequiredAttributeMissingException"/>
         public ModelRequiredAttributeMissingException(Type attributeType, string? methodName = null, string? parameterName = null, string? parameterType = null) : base(GetMessage(attributeType, methodName, parameterName, parameterType))
         {
 
@@ -111,7 +134,7 @@ public sealed partial class FunctionDefinition
             }
             else if (attributeType == typeof(ParamDescriptionAttribute))
             {
-                return $"Error on parameter '{parameter}' on method '{method}'. A description of all parameters (excluding string-enums) is required by the model. Endorse all parameters (excluding string-enums) with the {nameof(ParamDescriptionAttribute)}.";
+                return $"Error on parameter '{parameter}' on method '{method}'. A description of all parameters (excluding string-enums and booleans) is required by the model. Endorse all parameters (excluding string-enums and booleans) with the {nameof(ParamDescriptionAttribute)}.";
             }
             else if (attributeType == typeof(EnumValuesAttribute))
             {
@@ -130,9 +153,8 @@ public sealed partial class FunctionDefinition
         internal required string _name;
         internal required string _type;
         internal string? _description;
-        internal string[]? _enumValues;
+        internal object[]? _enumValues;
         internal bool _required;
-        internal bool isBoolean = false;
     }
 
     /// <summary>
@@ -143,44 +165,79 @@ public sealed partial class FunctionDefinition
     /// <exception cref="InvalidOperationException"></exception>
     public string? RunFunction(List<FunctionCall.ArgumentDefinition> modelGivenArguments)
     {
-        if (_method == null)
+        if (_targetMethod == null)
             throw new InvalidOperationException("This function-definition does not have a defined function (delegate) to invoke.");
 
-        var methodParameters = _method.Method.GetParameters();
+        var targetMethodParameters = _targetMethod.Method.GetParameters();
 
         // Create an array of objects to hold the arguments for the dynamic function call.
         // We use the number of parameters the function is EXPECTING, not the amount provided by the model.
-        object?[] argumentObjects = new object[methodParameters.Length];
+        object?[] methodParameterObjects = new object[targetMethodParameters.Length];
 
-        // Deliberately leaves any non-set parameters to null (they are optional, but must be provided to dynamic invoke or the call will fail).
-        for (int i = 0; i < modelGivenArguments.Count; i++)
+        // If the model has given less arguments than we need (i.e optional parameters)
+        // we need to ensure we leave those object un-initialised (null).
+        int initAmount = targetMethodParameters.Length;
+        if (modelGivenArguments.Count < targetMethodParameters.Length)
         {
-            // The model does not provide actual boolean values, it provides the 'string'
-            // representation "true" or "false", so, if the parameter we are providing is a boolean,
-            // we parse that 'string' provided by the model into an actual boolean value.
-            if (methodParameters[i].ParameterType == typeof(bool) &&
-                bool.TryParse(modelGivenArguments[i].Value?.ToString(), out bool parsedBool))
+            initAmount = modelGivenArguments.Count;
+        }
+
+        for (int i = 0; i < initAmount; i++)
+        {
+            object? argValue = null;
+
+            if (modelGivenArguments[i].Type == FunctionCall.ArgumentType.String)
             {
-                argumentObjects[i] = parsedBool;
-                continue;
+                argValue = Encoding.UTF8.GetString(modelGivenArguments[i].RawValue);
+            }
+            else if (modelGivenArguments[i].Type == FunctionCall.ArgumentType.Boolean)
+            {
+                // UTF-8 decode the raw value into characters.
+                Span<char> boolAsChars = new char[Encoding.UTF8.GetCharCount(modelGivenArguments[i].RawValue)];
+                boolAsChars = boolAsChars[..Encoding.UTF8.GetChars(modelGivenArguments[i].RawValue, boolAsChars)];
+
+                // Parse the characters as a bool.
+                if (bool.TryParse(boolAsChars, out bool parsedBool))
+                    argValue = parsedBool;
+            }
+            else if (modelGivenArguments[i].Type == FunctionCall.ArgumentType.Number)
+            {
+                // Encode the raw value into a string.
+                string numberAsString = Encoding.UTF8.GetString(modelGivenArguments[i].RawValue);
+
+                // Establish the type of the parameter which is expected by the method.
+                Type targetType = targetMethodParameters[i].ParameterType;
+
+                // Assuming the targetType is a number type (int, double, etc), retrieve the static 'Parse' method on that type.
+                var parseMethod = targetType.GetMethod("Parse", _stringTypeArrayCache);
+
+                // Invoke the static Parse method on the number type and box its value into the argValue variable.
+                argValue = parseMethod?.Invoke(null, new object[] { numberAsString });
             }
 
-            argumentObjects[i] = modelGivenArguments[i].Value;
+            methodParameterObjects[i] = argValue;
         }
 
         try
         {
-            return (string?)(_method?.DynamicInvoke(argumentObjects));
+            return (string?)(_targetMethod?.DynamicInvoke(methodParameterObjects));
         }
         catch (TargetInvocationException e)
         {
             NLog.LogManager.GetCurrentClassLogger().Debug(
                 $"Function call failed '{nameof(TargetInvocationException)}'\nMessage: '{e.Message}'\nInnerException Message: '{e.InnerException?.Message}'\n" +
-                $"Model Provided Arguments: {string.Join(',', modelGivenArguments.Select((definition) => $"{{ Name: '{definition.Name}', Value: '{definition.Value}', Type: '{definition.Type}' }}"))}");
+                $"Model Provided Arguments: {string.Join(',', modelGivenArguments.Select((definition) => $"{{ Name: '{definition.Name}', Value: '{Encoding.UTF8.GetString(definition.RawValue)}', Type: '{definition.Type}' }}"))}");
 
             return $"Function call failed due to invalid parameters provided by the language model, the error message is: {e.InnerException?.Message}. Please try the function call again.";
         }
     }
+
+    /// <summary>
+    /// Used as a cache for <see cref="Type.GetMethod(string, int, Type[])"/> so that we don't keep creating the array.
+    /// <para/>
+    /// Represents a function that has one parameter of type string.
+    /// </summary>
+    private readonly Type[] _stringTypeArrayCache = new Type[] { typeof(string) };
 
     /// <summary>
     /// Creates a JSON Schema of the given function and its parameters.
@@ -217,31 +274,28 @@ public sealed partial class FunctionDefinition
             writer.WriteStartObject(parameter._name);
 
             writer.WriteString("type", parameter._type);
-            if (parameter.isBoolean)
+            if (parameter._type != "boolean")
             {
-                // A boolean is a fancy enum with values "true" or "false"
-                writer.WriteStartArray("enum");
-
-                writer.WriteStringValue("true");
-                writer.WriteStringValue("false");
-
-                writer.WriteEndArray();
-            }
-            else if (parameter._enumValues == null)
-            {
-                // We are dealing with a non-enum type.
-                writer.WriteString("description", parameter._description);
-            }
-            else
-            {
-                // We are dealing with an enum type.
-
-                writer.WriteStartArray("enum");
-                for (int e = 0; e < parameter._enumValues?.Length; e++)
+                if (parameter._enumValues == null)
                 {
-                    writer.WriteStringValue(parameter._enumValues?[e]);
+                    // We are dealing with a non-enum type.
+                    writer.WriteString("description", parameter._description);
                 }
-                writer.WriteEndArray();
+                else
+                {
+                    // We are dealing with an enum type.
+
+                    writer.WriteStartArray("enum");
+                    for (int e = 0; e < parameter._enumValues?.Length; e++)
+                    {
+                        // TODO: Handle enum types properly.
+                        if (parameter._enumValues[e].GetType() == typeof(string))
+                            writer.WriteStringValue(parameter._enumValues?[e].ToString());
+                        else
+                            writer.WriteNumberValue(decimal.Parse(parameter._enumValues?[e].ToString()));
+                    }
+                    writer.WriteEndArray();
+                }
             }
 
             writer.WriteEndObject();
