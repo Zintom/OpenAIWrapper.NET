@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -62,7 +63,7 @@ public sealed class Choice
     public Message? Message { get; set; }
 
     /// <summary>
-    /// The message in this response (when streaming), see <see cref="ChatGPT.GetStreamingChatCompletion(Message[], Action{ChatCompletion?}, ChatGPT.ChatCompletionOptions?, FunctionDefinition[])">GetStreamingChatCompletion</see>.
+    /// The message in this response (when streaming a response).
     /// </summary>
     [JsonPropertyName("delta")]
     public Message? Delta { get; set; }
@@ -130,6 +131,7 @@ public sealed class FunctionCall
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
 
+    [JsonPropertyName("arguments")]
     public List<ArgumentDefinition> Arguments { get; set; } = new();
 
     public struct ArgumentDefinition
@@ -145,22 +147,27 @@ public sealed class FunctionCall
         public required ArgumentType Type;
 
         /// <summary>
-        /// The actual argument itself, as an object.
+        /// The actual argument itself, as bytes.
         /// </summary>
-        public required object? Value;
+        public required byte[] RawValue;
     }
 
     public enum ArgumentType
     {
         /// <summary>
-        /// A double precision number.
+        /// A number of any kind, integral or floating-point.
         /// </summary>
         Number,
 
         /// <summary>
-        /// A string.
+        /// A UTF-8 string.
         /// </summary>
-        String
+        String,
+
+        /// <summary>
+        /// A boolean value, true or false.
+        /// </summary>
+        Boolean
     }
 }
 
@@ -208,9 +215,11 @@ public sealed class FunctionCallJsonConverter : JsonConverter<FunctionCall>
 
         if (arguments.Length > 0)
         {
+            // Decode the arguments into UTF-8 into the buffer.
             Span<byte> argumentsUtf8Bytes = stackalloc byte[Encoding.UTF8.GetMaxByteCount(arguments.Length)];
             argumentsUtf8Bytes = argumentsUtf8Bytes[..Encoding.UTF8.GetBytes(arguments, argumentsUtf8Bytes)];
 
+            // Parse the arguments.
             InternalReadArgumentsObject(new Utf8JsonReader(argumentsUtf8Bytes), functionCall);
         }
 
@@ -238,21 +247,15 @@ public sealed class FunctionCallJsonConverter : JsonConverter<FunctionCall>
                     throw new JsonException("Expected argument value.");
                 }
 
-                object? argValue = null;
-                FunctionCall.ArgumentType argType = 0;
-
-                if (reader.TokenType == JsonTokenType.Number)
+                var argType = reader.TokenType switch
                 {
-                    argValue = reader.GetDouble();
-                    argType = FunctionCall.ArgumentType.Number;
-                }
-                if (reader.TokenType == JsonTokenType.String)
-                {
-                    argValue = reader.GetString() ?? "";
-                    argType = FunctionCall.ArgumentType.String;
-                }
+                    JsonTokenType.String => FunctionCall.ArgumentType.String,
+                    JsonTokenType.Number => FunctionCall.ArgumentType.Number,
+                    JsonTokenType.True or JsonTokenType.False => FunctionCall.ArgumentType.Boolean,
+                    _ => throw new UnreachableException(),
+                };
 
-                functionCall.Arguments.Add(new FunctionCall.ArgumentDefinition() { Name = argName, Type = argType, Value = argValue });
+                functionCall.Arguments.Add(new FunctionCall.ArgumentDefinition() { Name = argName, Type = argType, RawValue = reader.ValueSpan.ToArray() });
             }
         }
     }
