@@ -15,7 +15,9 @@ FunctionDefinition additionFunction = new FunctionDefinition.Builder("Add", "Add
   .SetMethod(Add)
   .Build();
 ```
-**Alternatively:** *Annotate* an existing function and have the ChatGPT class generate the FunctionDefinitions behind the scenes:
+**Alternatively:**
+
+*Annotate* an existing function and have the ChatGPT class generate the FunctionDefinitions behind the scenes:
 ```c#
 [FunctionDescription("Adds 'b' to 'a'.")]
 private static string Add([ParamDescription("The first value", true)] int a,
