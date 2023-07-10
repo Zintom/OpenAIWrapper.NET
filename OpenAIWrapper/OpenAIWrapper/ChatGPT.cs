@@ -1,6 +1,7 @@
 ﻿using NLog;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -10,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Zintom.OpenAIWrapper.Models;
+using static Zintom.OpenAIWrapper.Models.FunctionCall;
 
 namespace Zintom.OpenAIWrapper;
 
@@ -53,6 +55,16 @@ public sealed class ChatGPT
         /// The 'temperature' parameter to be used for future requests made by this instance.
         /// </summary>
         public float Temperature = 0.7f;
+
+        /// <summary>
+        /// If set to <see langword="true"/>, does not stop the model from calling the same function over and over again with the <i>same</i> arguments if it wants to.
+        /// </summary>
+        /// <remarks>
+        /// The default is <see langword="false"/>, this is because sometimes the model will 
+        /// almost 'ignore' the result of a function call and keep making the same call (expecting a different response), this
+        /// could result in a massive cost to the user/developer as an infinite request loop consumes lots of tokens.
+        /// </remarks>
+        public bool AllowInfiniteFunctionCalls = false;
     }
 
     /// <summary>
@@ -70,10 +82,8 @@ public sealed class ChatGPT
         API_Key = apiKey;
     }
 
-    private string InternalCreateRequestJson(List<Message> messages, ChatCompletionOptions? options = null, bool streamResponse = false, params FunctionDefinition[]? functions)
+    private static string InternalCreateRequestJson(List<Message> messages, ChatCompletionOptions options, bool streamResponse = false, params FunctionDefinition[]? functions)
     {
-        options ??= _defaultChatCompletionOptions;
-
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions() { Indented = false });
 
@@ -161,6 +171,15 @@ public sealed class ChatGPT
                                                      ChatCompletionOptions? options = null,
                                                      params FunctionDefinition[]? functions)
     {
+        options ??= _defaultChatCompletionOptions;
+
+        if (options.AllowInfiniteFunctionCalls)
+        {
+            _logger.Warn($"Warning! {nameof(options.AllowInfiniteFunctionCalls)} is TRUE. Therefore the model can make duplicate function calls and may find itself stuck in a loop.");
+        }
+
+        List<FunctionCall>? _functionCallHistory = null;
+
         while (true)
         {
             string requestBody = InternalCreateRequestJson(messages, options, false, functions);
@@ -174,31 +193,34 @@ public sealed class ChatGPT
                 throw new Exception($"OpenAI responded with status code '{response.StatusCode} ({(int)response.StatusCode})', Message: '{content}'");
             }
 
-            var chatCompletion = JsonSerializer.Deserialize<ChatCompletion>(content);
+            var chatCompletion = JsonSerializer.Deserialize<ChatCompletion>(content) ?? throw new Exception("ChatCompletion could not be deserialized.");
+
+            // KEEP TRACK OF EXECUTED FUNCTIONS.
+
+            var choice0 = chatCompletion?.Choices?[0] ?? throw new UnreachableException();
 
             // If the model wants to execute a function, we handle the entire function process before
             // returning back to the user.
 
-            if (chatCompletion?.Choices?[0].FinishReason == "function_call"
+            if (choice0.FinishReason == "function_call"
                 && functions != null)
             {
-                // Prevent infinite loops by supressing any further function calls
-                // If the model has called the same function and has got the same response twice.
-                if (messages.Count >= 2)
-                {
-                    var lastMessage = messages[^1];
-                    var secondToLastMessage = messages[^2];
-                    if (lastMessage.Role == "function" && secondToLastMessage.Role == "function" &&
-                        lastMessage.Name == secondToLastMessage.Name &&
-                        lastMessage.Content == secondToLastMessage.Content)
-                    {
-                        // This function was called identically already which means there is an infinite loop.
-                        messages.Add(new Message() { Role = "assistant", Content = "[Internal Thought] I've already called that function and have had the same response back, there must be an error somewhere." });
+                _functionCallHistory ??= new();
 
-                        // Set the available functions to null so that the AI can't call any more for this completion.
-                        functions = null;
-                        continue;
-                    }
+                if (choice0.Message?.FunctionCall != null)
+                    _functionCallHistory.Add(choice0.Message.FunctionCall);
+
+                if (options.AllowInfiniteFunctionCalls == false &&
+                    HasDuplicateFunctionCalls(_functionCallHistory))
+                {
+                    _logger.Debug($"Duplicate function call made by the model '{choice0.Message?.FunctionCall?.Name}'");
+
+                    // This function was called identically already which means there is an infinite loop.
+                    messages.Add(new Message() { Role = "assistant", Content = "[INTERNAL THOUGHT] I have already called that function with the same parameters. I have made an error, not the user." });
+
+                    // Set the available functions to null so that the AI can't call any more for this completion.
+                    functions = null;
+                    continue;
                 }
 
                 InternalHandleFunctionCall(messages, chatCompletion, functions);
@@ -208,6 +230,54 @@ public sealed class ChatGPT
                 return chatCompletion;
             }
         }
+    }
+
+    /// <summary>
+    /// Identifies duplicate <see cref="FunctionCall"/> objects in the given list <paramref name="functionCalls"/>.
+    /// </summary>
+    private static bool HasDuplicateFunctionCalls(List<FunctionCall>? functionCalls)
+    {
+        // If the list of functionCalls is null or contains only one item, there can be no duplicates,
+        // thus returns false.
+        if (functionCalls == null || functionCalls.Count <= 1)
+        {
+            return false;
+        }
+
+        // For comparison purpose, saves the name and arguments of the first function call.
+        string? lastFunctionName = functionCalls[0].Name;
+        List<ArgumentDefinition>? lastFunctionArgs = functionCalls[0].Arguments;
+
+        // Iterates over the remaining function calls in the list.
+        for (int i = 1; i < functionCalls.Count; i++)
+        {
+            var function = functionCalls[i];
+
+            // Checks if the current function call has the same name and the same number of arguments
+            // as the last function call.
+            if (function.Name == lastFunctionName &&
+                function.Arguments.Count == lastFunctionArgs?.Count)
+            {
+                // If same name and argument count are found, iterates over each argument.
+                for (int a = 0; a < function.Arguments.Count; a++)
+                {
+                    // Compares each argument's raw value; if they are the same, returns true,
+                    // indicating a duplicate function call has been found.
+                    if (function.Arguments[a].RawValue.SequenceEqual(lastFunctionArgs[a].RawValue))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // If no duplicate found for the current function, saves its information 
+            // for comparison with the next function call in the list.
+            lastFunctionName = function.Name;
+            lastFunctionArgs = function.Arguments;
+        }
+
+        // If no duplicates are found after scanning the entire list, returns false.
+        return false;
     }
 
     /// <summary>
@@ -225,6 +295,8 @@ public sealed class ChatGPT
     {
         if (functions != null)
             throw new NotImplementedException("Function calls do not currently work with streaming output.");
+
+        options ??= _defaultChatCompletionOptions;
 
         string requestBody = InternalCreateRequestJson(messages, options, true, functions);
 
