@@ -17,7 +17,7 @@ Decorate the method with the relevant attributes `FunctionDescription`, `ParamDe
 [FunctionDescription("Adds 'b' to 'a'.")]
 private static string Add([ParamDescription("The first value", true)] int a,
                           [ParamDescription("The second value", true)] int b,
-                          [ParamDescription("What base the output should be in", false), EnumValues(typeof(int), 2, 10, 16)] int toBase = 10)
+                          [ParamDescription("What base the output should be in", false), EnumValues(2, 10, 16)] int toBase = 10)
 {
     // Code goes here...
 }
