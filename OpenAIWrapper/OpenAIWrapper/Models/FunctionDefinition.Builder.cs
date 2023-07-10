@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Zintom.OpenAIWrapper.Models;
 
@@ -74,14 +75,14 @@ public sealed partial class FunctionDefinition
         /// <param name="description"><i>(Optional)</i> The description of the parameter.</param>
         /// <param name="isRequired">Indicates to the model if the parameter is required.</param>
         /// <param name="enumValues">The possible values of the parameter, such as { "celsius", "fahrenheit" }.</param>
-        public Builder AddParameter(string name, string? description, bool isRequired, params object[] enumValues)
+        public Builder AddParameter<T>(string name, string? description, bool isRequired, params T[] enumValues) where T : notnull
         {
             var parameter = new FunctionParameter()
             {
                 _name = name,
-                _type = "string",
+                _type = GetFriendlyTypeName(typeof(T)),
                 _description = description,
-                _enumValues = enumValues,
+                _enumValues = enumValues.Select((item) => (object)item).ToArray(),
                 _required = isRequired
             };
 
@@ -101,7 +102,7 @@ public sealed partial class FunctionDefinition
             var parameter = new FunctionParameter()
             {
                 _name = name,
-                _type = "boolean",
+                _type = GetFriendlyTypeName(typeof(bool)),
                 _description = description,
                 _required = isRequired
             };
