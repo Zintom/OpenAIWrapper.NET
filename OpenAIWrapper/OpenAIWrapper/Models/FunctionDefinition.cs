@@ -18,7 +18,7 @@ public sealed partial class FunctionDefinition
 {
     private string _name = "";
     private string _description = "";
-    private List<FunctionParameter> _parameters = null!; // The only way to get an instance of FunctionDefinition is going through the builder, which sets this field.
+    private List<FunctionParameter> _parameters = null!;
     private Delegate? _targetMethod;
 
     /// <summary>
@@ -70,22 +70,7 @@ public sealed partial class FunctionDefinition
              * https://json-schema.org/understanding-json-schema/reference/numeric.html
              */
 
-            if (IsIntegralNumber(methodParameter.ParameterType))
-            {
-                type = "integer";
-            }
-            else if (IsFloatingPointNumber(methodParameter.ParameterType))
-            {
-                type = "number";
-            }
-            else if (methodParameter.ParameterType == typeof(bool))
-            {
-                type = "boolean";
-            }
-            else
-            {
-                type = "string";
-            }
+            type = GetFriendlyTypeName(methodParameter.ParameterType);
 
             var p = new FunctionParameter()
             {
@@ -101,6 +86,14 @@ public sealed partial class FunctionDefinition
             var enumAttr = GetCustomAttributeFirstOrNull<EnumValuesAttribute>(methodParameter);
             p._enumValues = enumAttr?._possibleEnumValues;
 
+            // Check that the element type in the enum array matches the type of the parameter.
+            if(p._enumValues != null && p._enumValues.Length > 0 &&
+               p._enumValues[0].GetType() != methodParameter.ParameterType)
+            {
+                throw new Exception($"The {nameof(EnumValuesAttribute)} was applied to a parameter with the type '{methodParameter.ParameterType.Name}', however " +
+                                    $"the enum values given were of type '{p._enumValues[0].GetType()}'. Parameter name: '{methodParameter.Name}', Method name: '{methodInfo.Name}'.");
+            }
+
             if (string.IsNullOrEmpty(p._description) && // No description
                 (type != "string" || p._enumValues?.Length == 0) && // Not an enum
                 type != "boolean") // Not a boolean
@@ -113,6 +106,38 @@ public sealed partial class FunctionDefinition
         }
 
         return functionDefinition;
+    }
+
+    /// <summary>
+    /// Gets the JSON Schema "friendly" type name of the given <paramref name="type"/>, if the given <paramref name="type"/> is not supported or is <see langword="null"/>, then 'string' will be returned.
+    /// </summary>
+    /// <param name="type"></param>
+    /// <returns></returns>
+    private static string GetFriendlyTypeName(Type? type)
+    {
+        if (type == null)
+            return "string";
+
+        string? typeString;
+
+        if (IsIntegralNumber(type))
+        {
+            typeString = "integer";
+        }
+        else if (IsFloatingPointNumber(type))
+        {
+            typeString = "number";
+        }
+        else if (type == typeof(bool))
+        {
+            typeString = "boolean";
+        }
+        else
+        {
+            typeString = "string";
+        }
+
+        return typeString;
     }
 
     /// <summary>
@@ -245,6 +270,8 @@ public sealed partial class FunctionDefinition
     /// <returns></returns>
     public string ToJsonSchema()
     {
+        // Used for sending a function to a model.
+
         // https://json-schema.org/understanding-json-schema/
 
         if (_jsonSchema != null)
@@ -271,34 +298,7 @@ public sealed partial class FunctionDefinition
         {
             FunctionParameter parameter = _parameters[i];
 
-            writer.WriteStartObject(parameter._name);
-
-            writer.WriteString("type", parameter._type);
-            if (parameter._type != "boolean")
-            {
-                if (parameter._enumValues == null)
-                {
-                    // We are dealing with a non-enum type.
-                    writer.WriteString("description", parameter._description);
-                }
-                else
-                {
-                    // We are dealing with an enum type.
-
-                    writer.WriteStartArray("enum");
-                    for (int e = 0; e < parameter._enumValues?.Length; e++)
-                    {
-                        // TODO: Handle enum types properly.
-                        if (parameter._enumValues[e].GetType() == typeof(string))
-                            writer.WriteStringValue(parameter._enumValues?[e].ToString());
-                        else
-                            writer.WriteNumberValue(decimal.Parse(parameter._enumValues?[e].ToString()));
-                    }
-                    writer.WriteEndArray();
-                }
-            }
-
-            writer.WriteEndObject();
+            InternalWriteParameterJSON(writer, parameter);
 
             if (parameter._required)
                 requiredParameterNames.Add(parameter._name);
@@ -329,5 +329,39 @@ public sealed partial class FunctionDefinition
             _jsonSchema = sr.ReadToEnd();
             return _jsonSchema;
         }
+    }
+
+    /// <summary>
+    /// Writes a <see cref="FunctionParameter"/> as a JSON object.
+    /// </summary>
+    private static void InternalWriteParameterJSON(Utf8JsonWriter writer, FunctionParameter parameter)
+    {
+        writer.WriteStartObject(parameter._name);
+
+        // A parameter must have a 'type' defined.
+        writer.WriteString("type", parameter._type);
+
+        if (!string.IsNullOrEmpty(parameter._description))
+            writer.WriteString("description", parameter._description);
+
+        // If this parameter is an enum,
+        // we need to write out the possible enum values.
+        if (parameter._enumValues != null && parameter._enumValues.Length > 0)
+        {
+            writer.WriteStartArray("enum");
+
+            var arrayType = parameter._enumValues[0].GetType();
+            for (int e = 0; e < parameter._enumValues.Length; e++)
+            {
+                if (arrayType == typeof(string))
+                    writer.WriteStringValue(parameter._enumValues[e].ToString());
+                else
+                    writer.WriteRawValue(parameter._enumValues[e].ToString() ?? "null");
+            }
+
+            writer.WriteEndArray();
+        }
+
+        writer.WriteEndObject();
     }
 }
