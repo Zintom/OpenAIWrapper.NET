@@ -50,20 +50,14 @@ public class ParamDescriptionAttribute : Attribute
 [AttributeUsage(AttributeTargets.Parameter)]
 public class EnumValuesAttribute : Attribute
 {
-    /// <summary>
-    /// The type of the enumeration values.
-    /// </summary>
-    internal readonly Type _type;
     internal readonly object[]? _possibleEnumValues;
 
     /// <summary>
     /// Defines the possible enum values that a language model can use for this parameter.
     /// </summary>
-    /// <param name="type">The type of the enumeration values.</param>
     /// <param name="enumValues">If this is set to <see langword="null"/>, then it is effectively as if this attribute was not applied.</param>
-    public EnumValuesAttribute(Type type, params object[]? enumValues)
+    public EnumValuesAttribute(params object[]? enumValues)
     {
-        _type = type;
         _possibleEnumValues = enumValues;
     }
 }
