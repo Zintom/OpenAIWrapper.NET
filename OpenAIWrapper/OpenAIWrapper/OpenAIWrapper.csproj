@@ -26,8 +26,8 @@
     <IncludeSymbols>True</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <NeutralLanguage>en</NeutralLanguage>
-    <ApplicationIcon>app_icon_v1.ico</ApplicationIcon>
-    <PackageIcon>app_icon_v1.png</PackageIcon>
+    <ApplicationIcon>app_icon_v2.ico</ApplicationIcon>
+    <PackageIcon>app_icon_v2.png</PackageIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -39,11 +39,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="app_icon_v1.ico" />
+    <Content Include="app_icon_v2.ico" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\Icons\app_icon_v1.png">
+    <None Include="..\..\Icons\app_icon_v2.png">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
