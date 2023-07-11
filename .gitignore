@@ -398,3 +398,4 @@ FodyWeavers.xsd
 *.sln.iml
 OpenAIWrapper/Demo/Properties/launchSettings.json
 OpenAIWrapper/Tests/.runsettings
+Icon/*
