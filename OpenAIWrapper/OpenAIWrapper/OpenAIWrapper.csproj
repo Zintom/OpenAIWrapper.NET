@@ -8,14 +8,14 @@
     <RootNamespace>Zintom.OpenAIWrapper</RootNamespace>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <PackageReleaseNotes>The first official release.</PackageReleaseNotes>
-    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
+    <PackageReleaseNotes>Update description.</PackageReleaseNotes>
+    <Version>1.0.2</Version>
     <Title>OpenAI API Wrapper (ChatCompletions) (ChatGPT)</Title>
     <Authors>Zintom</Authors>
     <Company />
-    <Description>A C# wrapper around the OpenAI ChatCompletions (ChatGPT) API.</Description>
+    <Description>A C# / .NET wrapper library around the OpenAI ChatCompletions (ChatGPT) API. Easy-to-use with a wide range of functionality. Supports ChatCompletions with function-calling. Supports automatic function-call creation through simply applying attributes to an existing C# method.</Description>
     <Copyright>https://github.com/Zintom/OpenAIWrapper/blob/master/LICENSE</Copyright>
     <PackageProjectUrl>https://github.com/Zintom/OpenAIWrapper</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Zintom/OpenAIWrapper</RepositoryUrl>
