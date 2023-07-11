@@ -1,6 +1,6 @@
-# ChatCompletions C# Wrapper
+# ChatCompletions C# / .NET Wrapper
 
-A C# wrapper around the OpenAI ChatCompletions API.
+A C# / .NET wrapper library around the OpenAI ChatCompletions (ChatGPT) API. Easy-to-use with a wide range of functionality. Supports ChatCompletions with function-calling. Supports automatic function-call creation through simply applying attributes to an existing C# method.
 
 [![NuGet](https://img.shields.io/nuget/v/OpenAIWrapper?color=%2327ae60)](https://www.nuget.org/packages/OpenAIWrapper)
 
