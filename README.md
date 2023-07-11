@@ -2,6 +2,8 @@
 
 A C# wrapper around the OpenAI ChatCompletions API.
 
+[![NuGet](https://img.shields.io/nuget/v/OpenAIWrapper?color=%2327ae60)](https://www.nuget.org/packages/OpenAIWrapper)
+
 ## Basic Usage
 ```c#
 var gpt = new ChatGPT("your_secret_key");
