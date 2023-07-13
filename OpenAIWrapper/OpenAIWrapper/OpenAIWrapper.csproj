@@ -8,10 +8,12 @@
     <RootNamespace>Zintom.OpenAIWrapper</RootNamespace>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
-    <PackageReleaseNotes>Update description.</PackageReleaseNotes>
-    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
+    <PackageReleaseNotes>Adds the ability to change the 'function_call' setting, "auto", "none", or specific function.
+
+Fixes parameter ordering oversight which was causing a crash.</PackageReleaseNotes>
+    <Version>1.0.3</Version>
     <Title>OpenAI API Wrapper (ChatCompletions) (ChatGPT)</Title>
     <Authors>Zintom</Authors>
     <Company />
