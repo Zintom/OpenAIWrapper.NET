@@ -12,7 +12,12 @@ private static string Add(int a, int b, int toBase = 10)
 ### Decorate the method:
 Decorate the method with the relevant attributes `FunctionDescription`, `ParamDescription`, and (if relevant) `EnumValues` ([more on this](/Documentation/attributes.md)); which will enable the ChatGPT class to parse the method.
 
-*(Note: the `ChatGPT` class parses the method into a `FunctionDefinition` prior to sending it to the model. A `FunctionDefinition` is a serializable object which the model recognises)*
+<details closed>
+<summary>Further reading (expand)</summary>
+
+*The `ChatGPT` class parses the method into a `FunctionDefinition` prior to sending it to the model. A `FunctionDefinition` is a serializable object which the model recognises)*
+</details>
+
 ```c#
 [FunctionDescription("Adds 'b' to 'a'.")]
 private static string Add([ParamDescription("The first value", true)] int a,
