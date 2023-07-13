@@ -22,7 +22,10 @@ private static string Add([ParamDescription("The first value", true)] int a,
     // Code goes here...
 }
 ```
-Or **alternatively,** create your the `FunctionDefinition` manually:
+<details closed>
+<summary>Alternative to decoration (expand)</summary>
+    
+You can create your the `FunctionDefinition` manually:
 ```c#
 FunctionDefinition additionFunction = new FunctionDefinition.Builder("Add", "Adds 'b' to 'a'.")
   .AddParameter("a", "integer", "The first value", true)
@@ -31,13 +34,19 @@ FunctionDefinition additionFunction = new FunctionDefinition.Builder("Add", "Add
   .SetMethod(Add)
   .Build();
 ```
+
+This is functionally identical to decorating the method.
+</details>
+
 ### Call the model:
 Call the ChatCompletions API with your function:
 
 *(Note: you must use the 0613 variants of both GPT 3.5 Turbo and GPT-4 as of 7th July 2023 because the default models do not currently support functions)*
 ```c#
 var response = await gpt.GetChatCompletion(
-                          messages: new List<Zintom.OpenAIWrapper.Models.Message> { new Zintom.OpenAIWrapper.Models.Message() { Role = "user", Content = "What is 9 + 900?" } },
+                          messages: new List<Zintom.OpenAIWrapper.Models.Message> {
+                            new() { Role = "user", Content = "What is 9 + 900?" }
+                          },
                           options: new ChatGPT.ChatCompletionOptions() { Model = LanguageModels.GPT_3_5_Turbo_0613 },
                           functions: Add);
 ```
