@@ -82,16 +82,16 @@ public sealed class ChatGPT
         API_Key = apiKey;
     }
 
-    private static string InternalCreateRequestJson(List<Message> messages, ChatCompletionOptions options, bool streamResponse = false, params FunctionDefinition[]? functions)
+    private static string InternalCreateRequestJson(List<Message> messages, ChatCompletionOptions options, string? functionCall = null, bool streamResponse = false, params FunctionDefinition[]? functions)
     {
         using var stream = new MemoryStream();
-        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions() { Indented = false });
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions() { Indented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 
         writer.WriteStartObject();
 
         writer.WriteString("model", options.Model);
 
-        string messagesJson = JsonSerializer.Serialize(messages, new JsonSerializerOptions() { WriteIndented = false });
+        string messagesJson = JsonSerializer.Serialize(messages, new JsonSerializerOptions() { WriteIndented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         writer.WritePropertyName("messages");
         writer.WriteRawValue(messagesJson);
         writer.WriteNumber("temperature", options.Temperature);
@@ -105,6 +105,17 @@ public sealed class ChatGPT
                 writer.WriteRawValue(functions[i].ToJsonSchema());
             }
             writer.WriteEndArray();
+        }
+        if (functionCall == "auto" || functionCall == "none")
+        {
+            writer.WriteString("function_call", functionCall);
+        }
+        else if (functionCall != null)
+        {
+            // When you specify a function you must provide an object, not just a string.
+            writer.WriteStartObject("function_call");
+            writer.WriteString("name", functionCall);
+            writer.WriteEndObject();
         }
 
         writer.WriteEndObject();
@@ -150,27 +161,52 @@ public sealed class ChatGPT
     }
 
 
-    /// <inheritdoc cref="GetChatCompletion(List{Message}, ChatCompletionOptions?, FunctionDefinition[])"/>
+    /// <inheritdoc cref="GetChatCompletion(List{Message}, ChatCompletionOptions?, string?, FunctionDefinition[])"/>
     public Task<ChatCompletion?> GetChatCompletion(List<Message> messages,
                                                          ChatCompletionOptions? options = null,
+                                                         string? functionCall = null,
                                                          params Delegate[]? functions)
     {
         return GetChatCompletion(messages,
                                  options,
-                                 functions != null ? Array.ConvertAll(functions, new Converter<Delegate, FunctionDefinition>(FunctionDefinition.FromMethod)) : null);
+                                 functionCall,
+                                 functions != null ? Array.ConvertAll(functions, _delegateFunctionDefinitionConverter) : null);
     }
+
+    /// <summary>
+    /// Converts a delegate to a <see cref="FunctionDefinition"/>.
+    /// </summary>
+    private static readonly Converter<Delegate, FunctionDefinition> _delegateFunctionDefinitionConverter = new(FunctionDefinition.FromMethod);
 
     /// <summary>
     /// Gets a chat completion for the conversation history provided in <paramref name="messages"/>.
     /// </summary>
     /// <param name="messages">A list of messages describing the conversation so far.</param>
     /// <param name="options">Options used to configure the API call.</param>
+    /// <param name="functionCall">
+    /// Controls how the model responds to function calls.
+    /// "none" means the model does not call a function, and responds to the end-user.
+    /// "auto" means the model can pick between an end-user or calling a function.
+    /// Specifying a particular function using its exact name forces the model to call that function.
+    /// "none" is the default when no functions are present.
+    /// "auto" is the default if functions are present. Leaving this as <see langword="null"/> will stick to defaults.
+    /// </param>
     /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
     /// <returns>A <see cref="ChatCompletion"/> for the conversation history provided in the <paramref name="messages"/> array.</returns>
     public async Task<ChatCompletion?> GetChatCompletion(List<Message> messages,
                                                      ChatCompletionOptions? options = null,
+                                                     string? functionCall = null,
                                                      params FunctionDefinition[]? functions)
     {
+        if (functions != null &&
+            !string.IsNullOrWhiteSpace(functionCall) &&
+            functionCall != "auto" &&
+            functionCall != "none" &&
+            functions?.FirstOrDefault((f) => f.Name == functionCall) == null)
+        {
+            throw new ArgumentException($"The function \"{functionCall}\" does not exist in the list of provided functions.");
+        }
+
         options ??= _defaultChatCompletionOptions;
 
         if (options.AllowInfiniteFunctionCalls)
@@ -182,7 +218,7 @@ public sealed class ChatGPT
 
         while (true)
         {
-            string requestBody = InternalCreateRequestJson(messages, options, false, functions);
+            string requestBody = InternalCreateRequestJson(messages, options, functionCall, false, functions);
 
             using HttpResponseMessage response = await _client.PostAsync(_requestUri, new StringContent(requestBody, Encoding.UTF8, "application/json"));
 
@@ -298,7 +334,7 @@ public sealed class ChatGPT
 
         options ??= _defaultChatCompletionOptions;
 
-        string requestBody = InternalCreateRequestJson(messages, options, true, functions);
+        string requestBody = InternalCreateRequestJson(messages, options, "none", true, functions);
 
         _client.GetStreamingResponse(new HttpRequestMessage(HttpMethod.Post, new Uri(_requestUri)) { Content = new StringContent(requestBody, Encoding.UTF8, "application/json") },
                                      out HttpResponseMessage response,
