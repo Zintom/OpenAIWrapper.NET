@@ -10,7 +10,7 @@ var gpt = new ChatGPT("your_secret_key");
 
 var response = await gpt.GetChatCompletion(
                           messages: new List<Zintom.OpenAIWrapper.Models.Message> {
-                            new Zintom.OpenAIWrapper.Models.Message() { Role = "user", Content = "What is 9 + 900?" }
+                            new() { Role = "user", Content = "What is 9 + 900?" }
                           },
                           options: new ChatGPT.ChatCompletionOptions() { Model = LanguageModels.GPT_3_5_Turbo });
 
@@ -21,3 +21,16 @@ Console.WriteLine(response?.Choices?[0].Message?.Content);
 Other documentation and tutorials:
 
 - [Adding functions for a model to be able to call.](Documentation/function_calling.md)
+
+## Installation
+Visual Studio GUI:
+
+*Project -> Manage NuGet Packages... -> Search: "OpenAIWrapper" -> Install*
+
+Package Manager
+
+`PM> NuGet\Install-Package OpenAIWrapper`
+
+.NET CLI
+
+`> dotnet add package OpenAIWrapper`
