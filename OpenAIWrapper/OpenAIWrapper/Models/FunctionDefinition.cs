@@ -87,7 +87,7 @@ public sealed partial class FunctionDefinition
             p._enumValues = enumAttr?._possibleEnumValues;
 
             // Check that the element type in the enum array matches the type of the parameter.
-            if(p._enumValues != null && p._enumValues.Length > 0 &&
+            if (p._enumValues != null && p._enumValues.Length > 0 &&
                p._enumValues[0].GetType() != methodParameter.ParameterType)
             {
                 throw new Exception($"The {nameof(EnumValuesAttribute)} was applied to a parameter with the type '{methodParameter.ParameterType.Name}', however " +
@@ -190,48 +190,52 @@ public sealed partial class FunctionDefinition
     /// <exception cref="InvalidOperationException"></exception>
     public string? RunFunction(List<FunctionCall.ArgumentDefinition> modelGivenArguments)
     {
+        // Check existence of a bound function.
         if (_targetMethod == null)
             throw new InvalidOperationException("This function-definition does not have a defined function (delegate) to invoke.");
 
         var targetMethodParameters = _targetMethod.Method.GetParameters();
 
-        // Create an array of objects to hold the arguments for the dynamic function call.
-        // We use the number of parameters the function is EXPECTING, not the amount provided by the model.
-        object?[] methodParameterObjects = new object[targetMethodParameters.Length];
+        // This list will hold name-value pair of parameters.
+        List<(string parameterName, object? argValue)> methodParameterNamesAndValues = new();
 
-        // If the model has given less arguments than we need (i.e optional parameters)
-        // we need to ensure we leave those object un-initialised (null).
-        int initAmount = targetMethodParameters.Length;
-        if (modelGivenArguments.Count < targetMethodParameters.Length)
+        // For each model-given argument, parse the value into a usable form.
+        foreach (var modelGivenArgument in modelGivenArguments)
         {
-            initAmount = modelGivenArguments.Count;
-        }
+            // Locate associated method parameter.
+            ParameterInfo? parameter = targetMethodParameters.FirstOrDefault((p) => p.Name == modelGivenArgument.Name);
 
-        for (int i = 0; i < initAmount; i++)
-        {
+            if (parameter == null || parameter.Name == null)
+                // The model provided an argument that does not exist on the actual method or has no name, ignore.
+                continue;
+
+            // Placeholder to store parsed argument value.
             object? argValue = null;
 
-            if (modelGivenArguments[i].Type == FunctionCall.ArgumentType.String)
+            // Parsing argument based on its type:
+            if (modelGivenArgument.Type == FunctionCall.ArgumentType.String)
             {
-                argValue = Encoding.UTF8.GetString(modelGivenArguments[i].RawValue);
+                argValue = Encoding.UTF8.GetString(modelGivenArgument.RawValue);
             }
-            else if (modelGivenArguments[i].Type == FunctionCall.ArgumentType.Boolean)
+            else if (modelGivenArgument.Type == FunctionCall.ArgumentType.Boolean)
             {
+                // Parsing string to boolean
+
                 // UTF-8 decode the raw value into characters.
-                Span<char> boolAsChars = new char[Encoding.UTF8.GetCharCount(modelGivenArguments[i].RawValue)];
-                boolAsChars = boolAsChars[..Encoding.UTF8.GetChars(modelGivenArguments[i].RawValue, boolAsChars)];
+                Span<char> boolAsChars = new char[Encoding.UTF8.GetCharCount(modelGivenArgument.RawValue)];
+                boolAsChars = boolAsChars[..Encoding.UTF8.GetChars(modelGivenArgument.RawValue, boolAsChars)];
 
                 // Parse the characters as a bool.
                 if (bool.TryParse(boolAsChars, out bool parsedBool))
                     argValue = parsedBool;
             }
-            else if (modelGivenArguments[i].Type == FunctionCall.ArgumentType.Number)
+            else if (modelGivenArgument.Type == FunctionCall.ArgumentType.Number)
             {
                 // Encode the raw value into a string.
-                string numberAsString = Encoding.UTF8.GetString(modelGivenArguments[i].RawValue);
+                string numberAsString = Encoding.UTF8.GetString(modelGivenArgument.RawValue);
 
                 // Establish the type of the parameter which is expected by the method.
-                Type targetType = targetMethodParameters[i].ParameterType;
+                Type targetType = parameter.ParameterType;
 
                 // Assuming the targetType is a number type (int, double, etc), retrieve the static 'Parse' method on that type.
                 var parseMethod = targetType.GetMethod("Parse", _stringTypeArrayCache);
@@ -240,12 +244,26 @@ public sealed partial class FunctionDefinition
                 argValue = parseMethod?.Invoke(null, new object[] { numberAsString });
             }
 
-            methodParameterObjects[i] = argValue;
+            methodParameterNamesAndValues.Add(new(parameter.Name, argValue));
+        }
+
+        object?[] argValues = new object[targetMethodParameters.Length];
+
+        // Populate the array with parsed values which will be fed to the function call.
+        for (int i = 0; i < argValues.Length; i++)
+        {
+            ParameterInfo? parameter = targetMethodParameters[i];
+
+            // Find the parsed value gained earlier.
+            var (_, argValue) = methodParameterNamesAndValues.FirstOrDefault((m) => m.parameterName == parameter.Name);
+
+            argValues[i] = argValue ?? parameter.DefaultValue;
         }
 
         try
         {
-            return (string?)(_targetMethod?.DynamicInvoke(methodParameterObjects));
+            // Invoking the function using the parsed argument values.
+            return (string?)(_targetMethod?.DynamicInvoke(argValues));
         }
         catch (TargetInvocationException e)
         {
@@ -253,7 +271,7 @@ public sealed partial class FunctionDefinition
                 $"Function call failed '{nameof(TargetInvocationException)}'\nMessage: '{e.Message}'\nInnerException Message: '{e.InnerException?.Message}'\n" +
                 $"Model Provided Arguments: {string.Join(',', modelGivenArguments.Select((definition) => $"{{ Name: '{definition.Name}', Value: '{Encoding.UTF8.GetString(definition.RawValue)}', Type: '{definition.Type}' }}"))}");
 
-            return $"Function call failed due to invalid parameters provided by the language model, the error message is: {e.InnerException?.Message}. Please try the function call again.";
+            return $"Function call failed due to invalid parameters provided by the language model, the error message is: \"{e.InnerException?.Message}\". Please try the function call again.";
         }
     }
 
