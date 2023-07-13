@@ -28,9 +28,9 @@ private static string Add([ParamDescription("The first value", true)] int a,
 }
 ```
 <details closed>
-<summary>Alternative to decoration (expand)</summary>
+<summary>Alternative to decorating a method (expand)</summary>
     
-You can create your the `FunctionDefinition` manually:
+You can create the `FunctionDefinition` manually:
 ```c#
 FunctionDefinition additionFunction = new FunctionDefinition.Builder("Add", "Adds 'b' to 'a'.")
   .AddParameter("a", "integer", "The first value", true)
