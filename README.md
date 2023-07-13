@@ -20,7 +20,7 @@ Console.WriteLine(response?.Choices?[0].Message?.Content);
 
 Other documentation and tutorials:
 
-- [Adding functions for a model to be able to call.](Documentation/function_calling.md)
+- [Function Calling: Adding functions for a model to be able to call.](Documentation/function_calling.md)
 
 ## Installation
 Visual Studio GUI:
