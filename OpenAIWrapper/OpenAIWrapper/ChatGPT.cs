@@ -322,19 +322,14 @@ public sealed class ChatGPT
     /// <param name="messages">A list of messages describing the conversation so far.</param>
     /// <param name="partialCompletionCallback">The callback function for each time a 'delta' <see cref="ChatCompletion"/> is received.</param>
     /// <param name="options">Options used to configure the API call.</param>
-    /// <param name="functions">Any functions you wish for the GPT model to be able to call.</param>
     /// <returns>A <see cref="HttpStatusCode"/> which represents the response to the <i>POST</i> message.</returns>
     public HttpStatusCode GetStreamingChatCompletion(List<Message> messages,
                                                      Action<ChatCompletion?> partialCompletionCallback,
-                                                     ChatCompletionOptions? options = null,
-                                                     params FunctionDefinition[]? functions)
+                                                     ChatCompletionOptions? options = null)
     {
-        if (functions != null)
-            throw new NotImplementedException("Function calls do not currently work with streaming output.");
-
         options ??= _defaultChatCompletionOptions;
 
-        string requestBody = InternalCreateRequestJson(messages, options, "none", true, functions);
+        string requestBody = InternalCreateRequestJson(messages, options, null, true, null);
 
         _client.GetStreamingResponse(new HttpRequestMessage(HttpMethod.Post, new Uri(_requestUri)) { Content = new StringContent(requestBody, Encoding.UTF8, "application/json") },
                                      out HttpResponseMessage response,
